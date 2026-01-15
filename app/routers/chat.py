@@ -13,9 +13,10 @@ import logging
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Path, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Path, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel, Field
 
+from app.auth import get_current_user, AuthUser
 from app.exceptions import SessionNotFoundError
 from core.services.session_service import SessionService
 from core.services.plan_service import PlanService
@@ -104,6 +105,7 @@ class ChatResponse(BaseModel):
 async def chat(
     session_id: Annotated[UUID, Path(description="Session UUID")],
     request: ChatRequest,
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Send a chat message to transform data (Plan Mode).
@@ -121,12 +123,14 @@ async def chat(
     - "show me the plan" (view current plan)
     - "clear the plan" (start over)
     - "apply" (execute planned transformations)
+
+    User must own the session.
     """
     session_id_str = str(session_id)
 
-    # Verify session exists
+    # Verify session exists and user owns it
     try:
-        SessionService.get_session(session_id_str)
+        SessionService.get_session(session_id_str, user_id=user.id)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail=f"Session not found: {session_id_str}")
 
@@ -260,16 +264,18 @@ async def _handle_chat_message(session_id: str, message: str) -> ChatResponse:
 @router.get("/{session_id}/plan", response_model=SessionPlanResponse)
 async def get_plan(
     session_id: Annotated[UUID, Path(description="Session UUID")],
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Get the current plan for a session.
 
     Returns the accumulated transformation steps and status.
+    User must own the session.
     """
     session_id_str = str(session_id)
 
     try:
-        SessionService.get_session(session_id_str)
+        SessionService.get_session(session_id_str, user_id=user.id)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail=f"Session not found: {session_id_str}")
 
@@ -282,6 +288,7 @@ async def apply_plan(
     session_id: Annotated[UUID, Path(description="Session UUID")],
     request: ApplyPlanRequest | None = None,
     background_tasks: BackgroundTasks = None,
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Apply the current plan to create a new data version.
@@ -292,11 +299,12 @@ async def apply_plan(
     - "steps": Apply specific step numbers only
 
     Returns a task ID for tracking progress.
+    User must own the session.
     """
     session_id_str = str(session_id)
 
     try:
-        SessionService.get_session(session_id_str)
+        SessionService.get_session(session_id_str, user_id=user.id)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail=f"Session not found: {session_id_str}")
 
@@ -363,16 +371,18 @@ async def apply_plan(
 @router.post("/{session_id}/plan/clear", response_model=SessionPlanResponse)
 async def clear_plan(
     session_id: Annotated[UUID, Path(description="Session UUID")],
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Clear all steps from the current plan.
 
     Use this to start over with a fresh plan.
+    User must own the session.
     """
     session_id_str = str(session_id)
 
     try:
-        SessionService.get_session(session_id_str)
+        SessionService.get_session(session_id_str, user_id=user.id)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail=f"Session not found: {session_id_str}")
 

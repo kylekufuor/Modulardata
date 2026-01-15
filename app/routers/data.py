@@ -9,9 +9,10 @@ import logging
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, Path, Query, Depends
 from fastapi.responses import StreamingResponse
 
+from app.auth import get_current_user, AuthUser
 from app.exceptions import NoDataError, NodeNotFoundError
 from core.services.session_service import SessionService
 from core.services.node_service import NodeService
@@ -29,16 +30,18 @@ router = APIRouter()
 @router.get("/{session_id}/profile")
 async def get_profile(
     session_id: Annotated[UUID, Path(description="Session UUID")],
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Get the current data profile for a session.
 
     Returns detailed column information, statistics, and data quality issues.
+    User must own the session.
     """
     session_id_str = str(session_id)
 
-    # Verify session exists
-    SessionService.get_session(session_id_str)
+    # Verify session exists and user owns it
+    SessionService.get_session(session_id_str, user_id=user.id)
 
     # Get current node
     current_node = NodeService.get_current_node(session_id_str)
@@ -60,16 +63,18 @@ async def get_profile(
 @router.get("/{session_id}/profile/summary")
 async def get_profile_summary(
     session_id: Annotated[UUID, Path(description="Session UUID")],
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Get a compact profile summary.
 
     Returns just the essential info: row/column counts and column names.
+    User must own the session.
     """
     session_id_str = str(session_id)
 
-    # Verify session exists
-    SessionService.get_session(session_id_str)
+    # Verify session exists and user owns it
+    SessionService.get_session(session_id_str, user_id=user.id)
 
     # Get current node
     current_node = NodeService.get_current_node(session_id_str)
@@ -97,17 +102,19 @@ async def get_data(
     session_id: Annotated[UUID, Path(description="Session UUID")],
     format: Annotated[Literal["csv", "json"], Query(description="Output format")] = "csv",
     limit: Annotated[int | None, Query(ge=1, le=10000, description="Max rows to return")] = None,
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Download the current data.
 
     Supports CSV (default) or JSON format.
     Use limit parameter to get only first N rows.
+    User must own the session.
     """
     session_id_str = str(session_id)
 
-    # Verify session exists
-    SessionService.get_session(session_id_str)
+    # Verify session exists and user owns it
+    SessionService.get_session(session_id_str, user_id=user.id)
 
     # Get current node
     current_node = NodeService.get_current_node(session_id_str)
@@ -156,17 +163,19 @@ async def get_data(
 async def get_preview(
     session_id: Annotated[UUID, Path(description="Session UUID")],
     rows: Annotated[int, Query(ge=1, le=100, description="Number of rows")] = 10,
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Get a quick preview of the data.
 
     Returns first N rows as JSON for display in UI.
     This is faster than downloading full data.
+    User must own the session.
     """
     session_id_str = str(session_id)
 
-    # Verify session exists
-    SessionService.get_session(session_id_str)
+    # Verify session exists and user owns it
+    SessionService.get_session(session_id_str, user_id=user.id)
 
     # Get current node
     current_node = NodeService.get_current_node(session_id_str)
@@ -213,14 +222,19 @@ async def get_node_data(
     node_id: Annotated[UUID, Path(description="Node UUID")],
     format: Annotated[Literal["csv", "json"], Query(description="Output format")] = "csv",
     limit: Annotated[int | None, Query(ge=1, le=10000, description="Max rows")] = None,
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Download data from a specific node (version).
 
     Useful for comparing different versions or downloading historical data.
+    User must own the session.
     """
     session_id_str = str(session_id)
     node_id_str = str(node_id)
+
+    # Verify session exists and user owns it
+    SessionService.get_session(session_id_str, user_id=user.id)
 
     # Get node
     node = NodeService.get_node(node_id_str)
@@ -268,14 +282,19 @@ async def get_node_data(
 async def get_node_profile(
     session_id: Annotated[UUID, Path(description="Session UUID")],
     node_id: Annotated[UUID, Path(description="Node UUID")],
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Get profile for a specific node (version).
 
     Useful for comparing how data changed across versions.
+    User must own the session.
     """
     session_id_str = str(session_id)
     node_id_str = str(node_id)
+
+    # Verify session exists and user owns it
+    SessionService.get_session(session_id_str, user_id=user.id)
 
     # Get node
     node = NodeService.get_node(node_id_str)

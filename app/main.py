@@ -8,6 +8,8 @@
 #   poetry run uvicorn app.main:app --reload
 # =============================================================================
 
+import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
 
@@ -16,12 +18,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
+from app.websocket import websocket_manager, WEBSOCKET_CHANNEL
 from app.exceptions import (
     ModularDataException,
     modulardata_exception_handler,
     validation_exception_handler,
 )
 from app.routers import health, sessions, upload, data, tasks, chat, history
+from app.auth import routes as auth_routes
+from app.websocket import routes as websocket_routes
 
 # Configure logging
 logging.basicConfig(
@@ -31,23 +36,91 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# Global flag for Redis listener task
+_redis_listener_task = None
+_shutdown_event = None
+
+
+async def redis_pubsub_listener():
+    """
+    Background task that listens to Redis pub/sub and broadcasts to WebSockets.
+
+    This bridges Celery workers with WebSocket clients by:
+    1. Subscribing to the Redis channel where workers publish events
+    2. Broadcasting received events to connected WebSocket clients
+    """
+    import redis.asyncio as aioredis
+
+    logger.info("Starting Redis pub/sub listener for WebSocket broadcasts")
+
+    try:
+        redis_client = aioredis.from_url(settings.REDIS_URL)
+        pubsub = redis_client.pubsub()
+        await pubsub.subscribe(WEBSOCKET_CHANNEL)
+
+        async for message in pubsub.listen():
+            if _shutdown_event and _shutdown_event.is_set():
+                break
+
+            if message["type"] == "message":
+                try:
+                    data = json.loads(message["data"])
+                    session_id = data.pop("session_id", None)
+
+                    if session_id:
+                        await websocket_manager.broadcast(session_id, data)
+                        logger.debug(f"Broadcast {data.get('type')} to session {session_id}")
+
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Invalid JSON in Redis message: {e}")
+                except Exception as e:
+                    logger.error(f"Error processing Redis message: {e}")
+
+    except asyncio.CancelledError:
+        logger.info("Redis pub/sub listener cancelled")
+    except Exception as e:
+        logger.error(f"Redis pub/sub listener error: {e}")
+    finally:
+        try:
+            await pubsub.unsubscribe(WEBSOCKET_CHANNEL)
+            await redis_client.close()
+        except Exception:
+            pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Application lifespan handler.
 
     Runs on startup and shutdown:
-    - Startup: Initialize connections, validate config
-    - Shutdown: Clean up resources
+    - Startup: Initialize connections, validate config, start background tasks
+    - Shutdown: Clean up resources, stop background tasks
     """
+    global _redis_listener_task, _shutdown_event
+
     # Startup
     logger.info(f"Starting ModularData API in {settings.ENVIRONMENT} mode")
     logger.info(f"CORS origins: {settings.cors_origins_list}")
+
+    # Start Redis pub/sub listener for WebSocket broadcasts
+    _shutdown_event = asyncio.Event()
+    _redis_listener_task = asyncio.create_task(redis_pubsub_listener())
 
     yield
 
     # Shutdown
     logger.info("Shutting down ModularData API")
+
+    # Stop Redis listener
+    if _shutdown_event:
+        _shutdown_event.set()
+    if _redis_listener_task:
+        _redis_listener_task.cancel()
+        try:
+            await _redis_listener_task
+        except asyncio.CancelledError:
+            pass
 
 
 # Create FastAPI application
@@ -106,6 +179,10 @@ curl -X POST http://localhost:8000/api/v1/sessions/{id}/plan/apply
     lifespan=lifespan,
     openapi_tags=[
         {
+            "name": "Auth",
+            "description": "Authentication endpoints for verifying JWT tokens",
+        },
+        {
             "name": "Sessions",
             "description": "Create and manage data transformation sessions",
         },
@@ -128,6 +205,10 @@ curl -X POST http://localhost:8000/api/v1/sessions/{id}/plan/apply
         {
             "name": "History",
             "description": "Version history, undo/redo, and rollback",
+        },
+        {
+            "name": "WebSocket",
+            "description": "Real-time session updates",
         },
         {
             "name": "Health",
@@ -178,6 +259,13 @@ async def handle_general_exception(request: Request, exc: Exception):
 # Routers
 # =============================================================================
 
+# Authentication endpoints
+app.include_router(
+    auth_routes.router,
+    prefix="/api/v1/auth",
+    tags=["Auth"]
+)
+
 # Health check endpoints
 app.include_router(
     health.router,
@@ -225,6 +313,12 @@ app.include_router(
     history.router,
     prefix="/api/v1/sessions",
     tags=["History"]
+)
+
+# WebSocket endpoints (Real-time updates)
+app.include_router(
+    websocket_routes.router,
+    tags=["WebSocket"]
 )
 
 

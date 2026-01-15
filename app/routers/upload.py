@@ -11,8 +11,9 @@ from uuid import UUID
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, File, UploadFile, Path
+from fastapi import APIRouter, File, UploadFile, Path, Depends
 
+from app.auth import get_current_user, AuthUser
 from app.config import settings
 from app.exceptions import (
     InvalidFileTypeError,
@@ -71,6 +72,7 @@ def _sanitize_preview_rows(rows: list[dict]) -> list[dict]:
 async def upload_file(
     session_id: Annotated[UUID, Path(description="Session UUID")],
     file: Annotated[UploadFile, File(description="CSV file to upload")],
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Upload a CSV file to a session.
@@ -84,11 +86,12 @@ async def upload_file(
     6. Updates the session with the current node
 
     Returns the session info with the data profile.
+    User must own the session.
     """
     session_id_str = str(session_id)
 
-    # Verify session exists
-    SessionService.get_session(session_id_str)
+    # Verify session exists and user owns it
+    SessionService.get_session(session_id_str, user_id=user.id)
 
     # =============================================================================
     # 1. Validate File

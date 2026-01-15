@@ -55,6 +55,11 @@ class Settings(BaseSettings):
         description="Supabase service_role key (bypasses RLS)"
     )
 
+    SUPABASE_JWT_SECRET: str = Field(
+        ...,
+        description="Supabase JWT secret for verifying auth tokens"
+    )
+
     # -------------------------------------------------------------------------
     # Redis Configuration (for Celery)
     # -------------------------------------------------------------------------

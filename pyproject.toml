@@ -65,6 +65,7 @@ celery = "^5.3.0"
 # redis: Redis client for Python
 # - Used as message broker for Celery and for caching
 redis = "^5.0.0"
+python-jose = {extras = ["cryptography"], version = "^3.5.0"}
 
 [tool.poetry.group.dev.dependencies]
 # -----------------------------------------------------------------------------

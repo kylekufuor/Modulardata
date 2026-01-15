@@ -2,14 +2,16 @@
 # app/routers/sessions.py - Session CRUD Endpoints
 # =============================================================================
 # Handles session creation and management.
+# All endpoints require authentication.
 # =============================================================================
 
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Path
+from fastapi import APIRouter, Query, Path, Depends
 from pydantic import BaseModel, Field
 
+from app.auth import get_current_user, AuthUser
 from core.services.session_service import SessionService
 from core.models.session import SessionStatus, SessionResponse, SessionList
 
@@ -67,7 +69,10 @@ class SessionCreateResponse(BaseModel):
 # =============================================================================
 
 @router.post("", response_model=SessionCreateResponse)
-async def create_session(request: SessionCreateRequest | None = None):
+async def create_session(
+    user: AuthUser = Depends(get_current_user),
+    request: SessionCreateRequest | None = None,
+):
     """
     Create a new session.
 
@@ -75,7 +80,7 @@ async def create_session(request: SessionCreateRequest | None = None):
 
     Returns the session_id which is used for all subsequent operations.
     """
-    session = SessionService.create_session()
+    session = SessionService.create_session(user_id=user.id)
 
     return SessionCreateResponse(
         session_id=str(session["id"]),
@@ -86,14 +91,16 @@ async def create_session(request: SessionCreateRequest | None = None):
 
 @router.get("/{session_id}")
 async def get_session(
-    session_id: Annotated[UUID, Path(description="Session UUID")]
+    session_id: Annotated[UUID, Path(description="Session UUID")],
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Get session details.
 
     Returns the session with current data profile if data has been uploaded.
+    User must own the session.
     """
-    session = SessionService.get_session_with_profile(str(session_id))
+    session = SessionService.get_session_with_profile(str(session_id), user_id=user.id)
 
     return {
         "session_id": session["id"],
@@ -109,6 +116,7 @@ async def get_session(
 
 @router.get("")
 async def list_sessions(
+    user: AuthUser = Depends(get_current_user),
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 10,
     status: Annotated[SessionStatus | None, Query(description="Filter by status")] = None,
@@ -116,9 +124,15 @@ async def list_sessions(
     """
     List all sessions with pagination.
 
+    Returns only sessions owned by the authenticated user.
     Returns active sessions by default. Use status=archived to see archived sessions.
     """
-    sessions, total = SessionService.list_sessions(page, page_size, status)
+    sessions, total = SessionService.list_sessions(
+        user_id=user.id,
+        page=page,
+        page_size=page_size,
+        status=status,
+    )
 
     return {
         "sessions": [
@@ -139,15 +153,17 @@ async def list_sessions(
 
 @router.delete("/{session_id}")
 async def archive_session(
-    session_id: Annotated[UUID, Path(description="Session UUID")]
+    session_id: Annotated[UUID, Path(description="Session UUID")],
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Archive (soft delete) a session.
 
     The session is marked as archived but not deleted.
     Data history is preserved for auditing.
+    User must own the session.
     """
-    session = SessionService.archive_session(str(session_id))
+    session = SessionService.archive_session(str(session_id), user_id=user.id)
 
     return {
         "session_id": session["id"],

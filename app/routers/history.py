@@ -15,9 +15,10 @@ from typing import Annotated
 from uuid import UUID
 from datetime import datetime
 
-from fastapi import APIRouter, Path, HTTPException, Query
+from fastapi import APIRouter, Path, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 
+from app.auth import get_current_user, AuthUser
 from app.exceptions import SessionNotFoundError, NodeNotFoundError
 from core.services.session_service import SessionService
 from core.services.node_service import NodeService
@@ -123,6 +124,7 @@ class RollbackResponse(BaseModel):
 async def get_session_history(
     session_id: Annotated[UUID, Path(description="Session UUID")],
     include_messages: bool = Query(True, description="Include chat messages"),
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Get the full history of a session.
@@ -136,12 +138,14 @@ async def get_session_history(
     - Display the transformation timeline
     - Show the undo/redo options
     - Review what changes were made
+
+    User must own the session.
     """
     session_id_str = str(session_id)
 
-    # Verify session exists
+    # Verify session exists and user owns it
     try:
-        session = SessionService.get_session(session_id_str)
+        session = SessionService.get_session(session_id_str, user_id=user.id)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail=f"Session not found: {session_id_str}")
 
@@ -190,6 +194,7 @@ async def get_session_history(
 @router.get("/{session_id}/nodes", response_model=list[NodeSummary])
 async def list_nodes(
     session_id: Annotated[UUID, Path(description="Session UUID")],
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     List all nodes (versions) for a session.
@@ -199,11 +204,13 @@ async def list_nodes(
     - Transformation description
     - Row/column counts
     - Whether it's the current node
+
+    User must own the session.
     """
     session_id_str = str(session_id)
 
     try:
-        session = SessionService.get_session(session_id_str)
+        session = SessionService.get_session(session_id_str, user_id=user.id)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail=f"Session not found: {session_id_str}")
 
@@ -228,6 +235,7 @@ async def list_nodes(
 async def get_node_detail(
     session_id: Annotated[UUID, Path(description="Session UUID")],
     node_id: Annotated[UUID, Path(description="Node UUID")],
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Get detailed information about a specific node.
@@ -236,12 +244,14 @@ async def get_node_detail(
     - Full transformation details and code
     - Data preview (first 10 rows)
     - Storage path
+
+    User must own the session.
     """
     session_id_str = str(session_id)
     node_id_str = str(node_id)
 
     try:
-        session = SessionService.get_session(session_id_str)
+        session = SessionService.get_session(session_id_str, user_id=user.id)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail=f"Session not found: {session_id_str}")
 
@@ -279,6 +289,7 @@ async def get_node_detail(
 async def rollback_to_node(
     session_id: Annotated[UUID, Path(description="Session UUID")],
     request: RollbackRequest,
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Rollback the session to a previous node (undo).
@@ -288,13 +299,14 @@ async def rollback_to_node(
 
     Note: This does NOT delete any nodes. All history is preserved.
     You can always rollback to any node in the tree.
+    User must own the session.
     """
     session_id_str = str(session_id)
     target_node_id = request.target_node_id
 
-    # Verify session exists
+    # Verify session exists and user owns it
     try:
-        session = SessionService.get_session(session_id_str)
+        session = SessionService.get_session(session_id_str, user_id=user.id)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail=f"Session not found: {session_id_str}")
 
@@ -352,6 +364,7 @@ async def rollback_to_node(
 @router.post("/{session_id}/undo", response_model=RollbackResponse)
 async def undo_last_transformation(
     session_id: Annotated[UUID, Path(description="Session UUID")],
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Undo the last transformation (go to parent node).
@@ -360,12 +373,13 @@ async def undo_last_transformation(
     of the current node and rolls back to it.
 
     Returns an error if already at the root node (original upload).
+    User must own the session.
     """
     session_id_str = str(session_id)
 
-    # Get session
+    # Get session and verify ownership
     try:
-        session = SessionService.get_session(session_id_str)
+        session = SessionService.get_session(session_id_str, user_id=user.id)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail=f"Session not found: {session_id_str}")
 
@@ -389,7 +403,7 @@ async def undo_last_transformation(
 
     # Rollback to parent
     request = RollbackRequest(target_node_id=parent_id)
-    return await rollback_to_node(session_id, request)
+    return await rollback_to_node(session_id, request, user)
 
 
 @router.get("/{session_id}/lineage/{node_id}", response_model=list[NodeSummary])
@@ -397,18 +411,20 @@ async def get_node_lineage(
     session_id: Annotated[UUID, Path(description="Session UUID")],
     node_id: Annotated[UUID, Path(description="Node UUID")],
     depth: int = Query(10, ge=1, le=50, description="How many ancestors to fetch"),
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Get the ancestor chain (lineage) of a node.
 
     Returns nodes from the oldest ancestor to the specified node.
     Useful for understanding the transformation history that led to this state.
+    User must own the session.
     """
     session_id_str = str(session_id)
     node_id_str = str(node_id)
 
     try:
-        session = SessionService.get_session(session_id_str)
+        session = SessionService.get_session(session_id_str, user_id=user.id)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail=f"Session not found: {session_id_str}")
 

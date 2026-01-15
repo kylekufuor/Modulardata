@@ -7,8 +7,10 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Path, HTTPException
+from fastapi import APIRouter, Path, HTTPException, Depends
 from pydantic import BaseModel
+
+from app.auth import get_current_user, AuthUser
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +44,8 @@ class TaskSubmitResponse(BaseModel):
 
 @router.get("/{task_id}", response_model=TaskStatusResponse)
 async def get_task_status(
-    task_id: Annotated[str, Path(description="Celery task ID")]
+    task_id: Annotated[str, Path(description="Celery task ID")],
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Get the status of a background task.
@@ -107,7 +110,8 @@ async def get_task_status(
 
 @router.get("/{task_id}/result")
 async def get_task_result(
-    task_id: Annotated[str, Path(description="Celery task ID")]
+    task_id: Annotated[str, Path(description="Celery task ID")],
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Get the result of a completed task.
@@ -148,7 +152,8 @@ async def get_task_result(
 
 @router.delete("/{task_id}")
 async def cancel_task(
-    task_id: Annotated[str, Path(description="Celery task ID")]
+    task_id: Annotated[str, Path(description="Celery task ID")],
+    user: AuthUser = Depends(get_current_user),
 ):
     """
     Cancel a pending or running task.
@@ -182,7 +187,10 @@ async def cancel_task(
 
 
 @router.post("/test", response_model=TaskSubmitResponse)
-async def submit_test_task(message: str = "Hello from API"):
+async def submit_test_task(
+    message: str = "Hello from API",
+    user: AuthUser = Depends(get_current_user),
+):
     """
     Submit a test task to verify Celery is working.
 

@@ -208,6 +208,31 @@ def process_chat_message(
 
         logger.info(f"Task completed: Created node {node['id']}")
 
+        # Broadcast node_created event to WebSocket clients
+        try:
+            from app.websocket.broadcast import publish_node_created, publish_task_complete
+
+            publish_node_created(
+                session_id=session_id,
+                node_id=node["id"],
+                transformation=plan.explanation,
+                row_count=rows_after,
+                column_count=len(result_df.columns),
+            )
+
+            publish_task_complete(
+                session_id=session_id,
+                task_id=self.request.id,
+                result={
+                    "node_id": node["id"],
+                    "transformation": plan.explanation,
+                    "rows_before": rows_before,
+                    "rows_after": rows_after,
+                }
+            )
+        except Exception as broadcast_error:
+            logger.warning(f"Failed to broadcast event: {broadcast_error}")
+
         return {
             "success": True,
             "node_id": node["id"],
@@ -225,6 +250,18 @@ def process_chat_message(
 
     except Exception as e:
         logger.exception(f"Task failed: {e}")
+
+        # Broadcast task_failed event
+        try:
+            from app.websocket.broadcast import publish_task_failed
+            publish_task_failed(
+                session_id=session_id,
+                task_id=self.request.id,
+                error=str(e),
+            )
+        except Exception:
+            pass
+
         return {
             "success": False,
             "error": str(e),
@@ -499,6 +536,31 @@ def process_plan_apply(
 
         logger.info(f"Plan applied: {len(steps)} transformations, created node {node['id']}")
 
+        # Broadcast events to WebSocket clients
+        try:
+            from app.websocket.broadcast import publish_node_created, publish_task_complete
+
+            publish_node_created(
+                session_id=session_id,
+                node_id=node["id"],
+                transformation=combined_explanation,
+                row_count=rows_after,
+                column_count=len(df.columns),
+            )
+
+            publish_task_complete(
+                session_id=session_id,
+                task_id=self.request.id,
+                result={
+                    "node_id": node["id"],
+                    "transformations_applied": len(steps),
+                    "rows_before": rows_before,
+                    "rows_after": rows_after,
+                }
+            )
+        except Exception as broadcast_error:
+            logger.warning(f"Failed to broadcast event: {broadcast_error}")
+
         return {
             "success": True,
             "node_id": node["id"],
@@ -510,6 +572,18 @@ def process_plan_apply(
 
     except Exception as e:
         logger.exception(f"Plan apply failed: {e}")
+
+        # Broadcast task_failed event
+        try:
+            from app.websocket.broadcast import publish_task_failed
+            publish_task_failed(
+                session_id=session_id,
+                task_id=self.request.id,
+                error=str(e),
+            )
+        except Exception:
+            pass
+
         return {
             "success": False,
             "error": str(e),
