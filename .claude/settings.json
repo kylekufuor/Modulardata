@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "stop": [
+      {
+        "command": "./scripts/ralph-stop-hook.sh",
+        "description": "Ralph loop stop hook - blocks exit until completion promise found"
+      }
+    ]
+  },
+  "permissions": {
+    "allowedTools": ["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
+    "denyTools": []
+  }
+}
