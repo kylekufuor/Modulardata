@@ -1,0 +1,107 @@
+# =============================================================================
+# ModularData API - Project Configuration
+# =============================================================================
+# This file configures Poetry for dependency management. It defines:
+# - Project metadata (name, version, description)
+# - Python version constraints
+# - Runtime dependencies (packages needed to run the API)
+# - Development dependencies (packages only needed for testing/dev)
+# =============================================================================
+
+[tool.poetry]
+name = "modulardata"
+version = "0.1.0"
+description = "Production-grade AI Data Cleaning API with conversational data transformation"
+authors = ["Kyle Kufuor"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+# -----------------------------------------------------------------------------
+# Runtime Dependencies
+# -----------------------------------------------------------------------------
+# python: We require 3.10+ for modern type hints and performance improvements
+python = "^3.10"
+
+# fastapi: The async web framework for building our REST API
+# - Automatic OpenAPI docs, request validation, dependency injection
+fastapi = "^0.109.0"
+
+# uvicorn: ASGI server to run FastAPI
+# - The "standard" extra includes uvloop for better async performance
+uvicorn = {extras = ["standard"], version = "^0.27.0"}
+
+# pydantic: Data validation library (FastAPI uses this under the hood)
+# - We use v2 for improved performance and new features
+pydantic = "^2.5.0"
+
+# pydantic-settings: Extension for loading config from environment variables
+# - Allows us to define a Settings class that auto-loads from .env
+pydantic-settings = "^2.1.0"
+
+# supabase: Python client for Supabase (PostgreSQL + Storage + Auth)
+# - Handles database queries and file storage operations
+supabase = "^2.3.0"
+
+# python-multipart: Required for FastAPI file upload handling
+# - Enables parsing of multipart/form-data (CSV uploads)
+python-multipart = "^0.0.6"
+
+# openai: Official OpenAI Python client
+# - Used by agents for LLM calls with structured outputs (JSON mode)
+openai = "^1.12.0"
+
+# pandas: Data manipulation library
+# - Used by the profiler to analyze CSV files
+pandas = "^2.1.0"
+
+# numpy: Numerical computing library (pandas dependency)
+# - Used for numerical operations in profiling
+numpy = "^1.26.0"
+
+# celery: Distributed task queue for background job processing
+# - Handles heavy AI transformations without blocking the API
+celery = "^5.3.0"
+
+# redis: Redis client for Python
+# - Used as message broker for Celery and for caching
+redis = "^5.0.0"
+
+[tool.poetry.group.dev.dependencies]
+# -----------------------------------------------------------------------------
+# Development Dependencies (not included in production)
+# -----------------------------------------------------------------------------
+# pytest: Testing framework
+# - Used to run our test suite and verify everything works
+pytest = "^7.4.0"
+
+# httpx: Async HTTP client
+# - Used by FastAPI's TestClient for integration testing
+httpx = "^0.26.0"
+
+# pytest-asyncio: Plugin for testing async code
+# - Allows us to write async test functions
+pytest-asyncio = "^0.23.0"
+
+[tool.poetry.scripts]
+# -----------------------------------------------------------------------------
+# CLI Scripts (run with: poetry run <command>)
+# -----------------------------------------------------------------------------
+# start-worker: Start the Celery worker
+start-worker = "scripts.start_worker:main"
+
+[build-system]
+# -----------------------------------------------------------------------------
+# Build System Configuration
+# -----------------------------------------------------------------------------
+# Tells pip/other tools how to build this project
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+# -----------------------------------------------------------------------------
+# Pytest Configuration
+# -----------------------------------------------------------------------------
+# asyncio_mode: auto-detect async tests without explicit markers
+asyncio_mode = "auto"
+# testpaths: where to look for tests
+testpaths = ["tests"]

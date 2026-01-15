@@ -1,0 +1,6 @@
+product_id;product_name;price;quantity;category
+101;Widget A;19.99;150;Electronics
+102;Gadget B;29.99;75;Electronics
+103;Tool C;9.99;200;Hardware
+104;Supply D;4.99;500;Office
+105;Device E;149.99;25;Electronics

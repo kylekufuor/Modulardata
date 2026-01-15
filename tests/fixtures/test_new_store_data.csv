@@ -1,0 +1,4 @@
+CustomerID,E-Mail Address,Customer Name,Order Date,Total,Order Status,Store Region
+2001,alice@newstore.com,Alice Johnson,2024-02-01,350.00,shipped,Northeast
+2002,bob.w@another.org,Bob Williams,2024-02-02,275.50,processing,Southwest
+2003,carol@test.net,Carol Martinez,2024-02-03,189.99,shipped,Northeast

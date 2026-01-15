@@ -1,0 +1,11 @@
+customer_id,email,name,purchase_date,amount,status,region
+1001,john.doe@acme.com,John Doe,2024-01-15,299.99,completed,North
+1002,jane.smith@corp.net,  Jane Smith,2024-01-16,149.50,PENDING,South
+1003,bob@test.org,Bob Wilson,2024-01-17,75.00,Completed,north
+1004,,Alice Brown,2024-01-18,5000.00,completed,East
+1005,charlie@example.com,Charlie Davis,2024-01-19,125.25,pending,West
+1006,john.doe@acme.com,John Doe,2024-01-15,299.99,completed,North
+1007,  diana@mail.com  ,Diana Evans,,89.99,COMPLETED,South
+1008,invalid-email,Frank Miller,2024-01-21,199.00,completed,
+1009,grace@company.org,Grace Lee,2024-01-22,450.00,Pending,North
+1010,henry@business.com,Henry Taylor,2024-01-23,67.50,completed,West

@@ -1,0 +1,406 @@
+{
+  "info": {
+    "name": "ModularData API",
+    "description": "AI-powered data transformation API using a 3-agent pipeline.\n\n## Quick Start\n\n1. **Create a Session** - Start a new data transformation session\n2. **Upload CSV** - Upload your data file\n3. **Chat** - Send natural language transformation requests\n4. **Apply Plan** - Execute the accumulated transformations\n5. **Download** - Get your transformed data\n\n## Environment Variables\n\nSet these in your Postman environment:\n- `base_url`: API base URL (e.g., `http://localhost:8000`)\n- `session_id`: Will be auto-set after creating a session\n- `task_id`: Will be auto-set after applying a plan",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "session_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "task_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "node_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "description": "Health check endpoints for monitoring",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/health",
+            "description": "Basic health check - returns API status"
+          }
+        },
+        {
+          "name": "Readiness Check",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/health/ready",
+            "description": "Checks if API is ready to serve requests (DB + Redis connected)"
+          }
+        },
+        {
+          "name": "Liveness Check",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/health/live",
+            "description": "Simple liveness probe for container orchestration"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sessions",
+      "description": "Session management - create, list, delete sessions",
+      "item": [
+        {
+          "name": "Create Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.session_id) {",
+                  "    pm.collectionVariables.set('session_id', jsonData.session_id);",
+                  "    console.log('Session ID saved:', jsonData.session_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/sessions",
+            "description": "Create a new data transformation session. The session_id will be automatically saved for subsequent requests."
+          }
+        },
+        {
+          "name": "List Sessions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/sessions?limit=10&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "sessions"],
+              "query": [
+                {"key": "limit", "value": "10"},
+                {"key": "offset", "value": "0"}
+              ]
+            },
+            "description": "List all sessions with pagination"
+          }
+        },
+        {
+          "name": "Get Session",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/sessions/{{session_id}}",
+            "description": "Get details of a specific session"
+          }
+        },
+        {
+          "name": "Delete Session",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/api/v1/sessions/{{session_id}}",
+            "description": "Delete a session and all its data"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Upload",
+      "description": "File upload endpoints",
+      "item": [
+        {
+          "name": "Upload CSV",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/sessions/{{session_id}}/upload",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "description": "Select your CSV file"
+                }
+              ]
+            },
+            "description": "Upload a CSV file to the session. This creates the initial data node (Node 0)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat (Plan Mode)",
+      "description": "Conversational data transformation using natural language",
+      "item": [
+        {
+          "name": "Send Chat Message",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/sessions/{{session_id}}/chat",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"message\": \"remove rows where email is empty\"\n}"
+            },
+            "description": "Send a natural language transformation request.\n\nExamples:\n- \"remove rows where email is empty\"\n- \"trim whitespace from all columns\"\n- \"drop the age column\"\n- \"sort by name ascending\"\n- \"convert date to YYYY-MM-DD format\""
+          }
+        },
+        {
+          "name": "Get Current Plan",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/sessions/{{session_id}}/plan",
+            "description": "View the current transformation plan (accumulated steps)"
+          }
+        },
+        {
+          "name": "Apply Plan",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.message) {",
+                  "    var match = jsonData.message.match(/Task ID: ([a-f0-9-]+)/);",
+                  "    if (match) {",
+                  "        pm.collectionVariables.set('task_id', match[1]);",
+                  "        console.log('Task ID saved:', match[1]);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/sessions/{{session_id}}/plan/apply",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "description": "Execute all planned transformations. Returns a task_id for tracking progress."
+          }
+        },
+        {
+          "name": "Clear Plan",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/sessions/{{session_id}}/plan/clear",
+            "description": "Clear all pending transformations and start fresh"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tasks",
+      "description": "Background task management",
+      "item": [
+        {
+          "name": "Get Task Status",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/tasks/{{task_id}}",
+            "description": "Check the status of a background task (PENDING, PROGRESS, SUCCESS, FAILURE)"
+          }
+        },
+        {
+          "name": "Get Task Result",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/tasks/{{task_id}}/result",
+            "description": "Get the final result of a completed task"
+          }
+        },
+        {
+          "name": "Cancel Task",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/api/v1/tasks/{{task_id}}",
+            "description": "Cancel a running task"
+          }
+        },
+        {
+          "name": "Test Task (Debug)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/tasks/test",
+            "description": "Submit a test task to verify Celery is working"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Data Access",
+      "description": "Access and download data",
+      "item": [
+        {
+          "name": "Get Data Preview",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/sessions/{{session_id}}/preview?rows=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "sessions", "{{session_id}}", "preview"],
+              "query": [
+                {"key": "rows", "value": "10"}
+              ]
+            },
+            "description": "Get a preview of the current data (first N rows)"
+          }
+        },
+        {
+          "name": "Download Full Data",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/sessions/{{session_id}}/data",
+            "description": "Download the complete current dataset as CSV"
+          }
+        },
+        {
+          "name": "Get Data Profile",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/sessions/{{session_id}}/profile",
+            "description": "Get detailed data profile (column types, null counts, statistics)"
+          }
+        },
+        {
+          "name": "Get Profile Summary",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/sessions/{{session_id}}/profile/summary",
+            "description": "Get a text summary of the data profile"
+          }
+        },
+        {
+          "name": "Get Node Data",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/sessions/{{session_id}}/nodes/{{node_id}}/data",
+            "description": "Download data from a specific node (version)"
+          }
+        },
+        {
+          "name": "Get Node Profile",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/sessions/{{session_id}}/nodes/{{node_id}}/profile",
+            "description": "Get the profile for a specific node"
+          }
+        }
+      ]
+    },
+    {
+      "name": "History & Rollback",
+      "description": "Version history and undo/redo functionality",
+      "item": [
+        {
+          "name": "Get Session History",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.nodes && jsonData.nodes.length > 0) {",
+                  "    var firstNode = jsonData.nodes[0];",
+                  "    pm.collectionVariables.set('node_id', firstNode.id);",
+                  "    console.log('First node ID saved:', firstNode.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/sessions/{{session_id}}/history?include_messages=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "sessions", "{{session_id}}", "history"],
+              "query": [
+                {"key": "include_messages", "value": "true"}
+              ]
+            },
+            "description": "Get full session history including all nodes and chat messages"
+          }
+        },
+        {
+          "name": "List All Nodes",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/sessions/{{session_id}}/nodes",
+            "description": "List all version nodes for the session"
+          }
+        },
+        {
+          "name": "Get Node Details",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/v1/sessions/{{session_id}}/nodes/{{node_id}}",
+            "description": "Get detailed information about a specific node"
+          }
+        },
+        {
+          "name": "Undo Last Transformation",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/sessions/{{session_id}}/undo",
+            "description": "Undo the last transformation (go back to parent node)"
+          }
+        },
+        {
+          "name": "Rollback to Node",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/sessions/{{session_id}}/rollback",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"target_node_id\": \"{{node_id}}\"\n}"
+            },
+            "description": "Rollback to a specific node in the history"
+          }
+        },
+        {
+          "name": "Get Node Lineage",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/sessions/{{session_id}}/lineage/{{node_id}}?depth=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "sessions", "{{session_id}}", "lineage", "{{node_id}}"],
+              "query": [
+                {"key": "depth", "value": "10"}
+              ]
+            },
+            "description": "Get the ancestor chain (transformation history) for a node"
+          }
+        }
+      ]
+    }
+  ]
+}

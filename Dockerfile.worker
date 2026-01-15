@@ -1,0 +1,57 @@
+# =============================================================================
+# Dockerfile.worker - ModularData Celery Worker
+# =============================================================================
+# Celery worker for background task processing.
+# Uses the same base image as the API for consistency.
+#
+# Build: docker build -f Dockerfile.worker -t modulardata-worker .
+# Run:   docker run --env-file .env modulardata-worker
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Builder - Install dependencies
+# -----------------------------------------------------------------------------
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN pip install --no-cache-dir poetry==1.7.1
+
+# Copy dependency files
+COPY pyproject.toml poetry.lock ./
+
+# Configure Poetry: no virtualenv, install deps to system
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-interaction --no-ansi --only main
+
+# -----------------------------------------------------------------------------
+# Stage 2: Runtime - Final image
+# -----------------------------------------------------------------------------
+FROM python:3.11-slim as runtime
+
+WORKDIR /app
+
+# Create non-root user for security
+RUN groupadd --gid 1000 appuser \
+    && useradd --uid 1000 --gid 1000 --shell /bin/bash appuser
+
+# Copy installed packages from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy application code
+COPY --chown=appuser:appuser . .
+
+# Switch to non-root user
+USER appuser
+
+# Default command - run Celery worker
+# Concurrency set to 4 by default, adjust via CELERY_CONCURRENCY env var
+CMD ["celery", "-A", "workers.celery_app", "worker", "--loglevel=info", "--concurrency=4"]
