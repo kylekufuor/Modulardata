@@ -52,12 +52,15 @@ COPY --chown=appuser:appuser . .
 # Switch to non-root user
 USER appuser
 
-# Expose port
-EXPOSE 8000
+# Expose port (Railway assigns PORT dynamically)
+EXPOSE ${PORT:-8000}
 
-# Health check
+# Environment variable for port (Railway sets this)
+ENV PORT=8000
+
+# Health check - uses the PORT env var
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/api/v1/health/live || exit 1
+    CMD curl -f http://localhost:${PORT}/api/v1/health/live || exit 1
 
-# Default command - run API server
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Default command - uses shell form to expand $PORT
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
