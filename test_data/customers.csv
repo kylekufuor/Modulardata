@@ -1,0 +1,16 @@
+name,email,age,city,signup_date,purchase_amount
+John Smith,john@example.com,32,New York,2024-01-15,150.00
+Jane Doe,jane@example.com,28,Los Angeles,2024-01-16,200.50
+Bob Wilson,,45,Chicago,2024-01-17,75.00
+Alice Brown,alice@example.com,35,Houston,2024-01-18,300.00
+Charlie Davis,charlie@example.com,29,Phoenix,2024-01-19,125.75
+  Diana Miller  ,diana@example.com,41,Philadelphia,2024-01-20,450.00
+Eve Johnson,eve@example.com,,San Antonio,2024-01-21,89.99
+Frank White,frank@example.com,38,San Diego,2024-01-22,225.00
+Grace Lee,,52,Dallas,2024-01-23,175.50
+Henry Taylor,henry@example.com,33,San Jose,2024-01-24,310.00
+John Smith,john@example.com,32,New York,2024-01-15,150.00
+Ivy Clark,ivy@example.com,27,Austin,2024-01-25,95.00
+Jack Brown,jack@example.com,44,,2024-01-26,280.00
+Kate Wilson,kate@example.com,31,Fort Worth,2024-01-27,165.00
+Leo Martin,leo@example.com,36,Columbus,2024-01-28,

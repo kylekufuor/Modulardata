@@ -6,9 +6,11 @@
 
 import io
 import logging
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
+import numpy as np
+import pandas as pd
 from fastapi import APIRouter, File, UploadFile, Path
 
 from app.config import settings
@@ -26,6 +28,39 @@ from lib.profiler import generate_profile, read_csv_safe
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
+def _sanitize_value(value: Any) -> Any:
+    """Convert numpy/pandas types to JSON-serializable Python types."""
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return None
+    if pd.isna(value):
+        return None
+    if isinstance(value, (np.integer, np.int64, np.int32)):
+        return int(value)
+    if isinstance(value, (np.floating, np.float64, np.float32)):
+        return float(value)
+    if isinstance(value, np.bool_):
+        return bool(value)
+    if isinstance(value, (np.ndarray, pd.Series)):
+        return value.tolist()
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+    if hasattr(value, 'item'):  # Generic numpy scalar
+        return value.item()
+    return value
+
+
+def _sanitize_preview_rows(rows: list[dict]) -> list[dict]:
+    """Sanitize all values in preview rows for JSON serialization."""
+    return [
+        {k: _sanitize_value(v) for k, v in row.items()}
+        for row in rows
+    ]
 
 
 # =============================================================================
@@ -130,8 +165,8 @@ async def upload_file(
     # 5. Create Node 0
     # =============================================================================
 
-    # Get preview rows (first 10)
-    preview_rows = df.head(10).to_dict(orient="records")
+    # Get preview rows (first 10) - sanitize for JSON serialization
+    preview_rows = _sanitize_preview_rows(df.head(10).to_dict(orient="records"))
 
     node = NodeService.create_node(
         session_id=session_id_str,
@@ -161,16 +196,16 @@ async def upload_file(
     # 7. Return Response
     # =============================================================================
 
-    # Build simplified profile for response
+    # Build simplified profile for response - sanitize all values for JSON
     column_summaries = []
     for col in profile.columns:
         column_summaries.append({
             "name": col.name,
             "dtype": col.dtype,
-            "semantic_type": col.semantic_type.value if hasattr(col.semantic_type, 'value') else col.semantic_type,
-            "null_count": col.null_count,
-            "null_percent": col.null_percent,
-            "unique_count": col.unique_count,
+            "semantic_type": col.semantic_type.value if hasattr(col.semantic_type, 'value') else str(col.semantic_type),
+            "null_count": int(col.null_count) if col.null_count is not None else 0,
+            "null_percent": float(col.null_percent) if col.null_percent is not None else 0.0,
+            "unique_count": int(col.unique_count) if col.unique_count is not None else 0,
         })
 
     # Extract issues as strings
@@ -189,11 +224,11 @@ async def upload_file(
         "filename": filename,
         "storage_path": storage_path,
         "profile": {
-            "row_count": profile.row_count,
-            "column_count": profile.column_count,
+            "row_count": int(profile.row_count) if profile.row_count is not None else 0,
+            "column_count": int(profile.column_count) if profile.column_count is not None else 0,
             "columns": column_summaries,
             "issues": issues_list[:20],  # Limit to 20 issues in response
-            "duplicate_row_count": profile.duplicate_row_count,
+            "duplicate_row_count": int(profile.duplicate_row_count) if profile.duplicate_row_count is not None else 0,
         },
         "preview": preview_rows[:5],  # First 5 rows for quick view
     }
