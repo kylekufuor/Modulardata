@@ -353,3 +353,162 @@ def handle_outliers(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame
 
     code = "\n".join(code_parts)
     return result, code
+
+
+@register(TransformationType.ABS_VALUE)
+def abs_value(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame, str]:
+    """
+    Convert numeric values to absolute values.
+
+    Parameters (from plan.parameters):
+        target_columns: Columns to apply absolute value
+        new_column: Optional new column name (otherwise modifies in place)
+
+    Example:
+        -42 -> 42
+        -3.14 -> 3.14
+    """
+    columns = plan.get_target_column_names()
+    new_column = plan.parameters.get("new_column")
+
+    result = df.copy()
+    code_parts = []
+
+    for col in columns:
+        if col not in result.columns:
+            continue
+
+        target_col = new_column if new_column else col
+        result[target_col] = result[col].abs()
+        code_parts.append(f"df['{target_col}'] = df['{col}'].abs()")
+
+    code = "\n".join(code_parts)
+    return result, code
+
+
+@register(TransformationType.PERCENT_OF_TOTAL)
+def percent_of_total(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame, str]:
+    """
+    Calculate each value as percentage of column total.
+
+    Parameters (from plan.parameters):
+        target_columns: Columns to calculate percentage for
+        partition_by: Optional column(s) to calculate percentage within groups
+        suffix: Suffix for new columns (default: "_pct")
+        decimal_places: Number of decimal places (default: 2)
+
+    Example:
+        values [10, 20, 30] -> [16.67, 33.33, 50.00] (percent of 60)
+    """
+    columns = plan.get_target_column_names()
+    partition_by = plan.parameters.get("partition_by")
+    suffix = plan.parameters.get("suffix", "_pct")
+    decimal_places = plan.parameters.get("decimal_places", 2)
+
+    result = df.copy()
+    code_parts = []
+
+    for col in columns:
+        if col not in result.columns:
+            continue
+
+        new_col = f"{col}{suffix}"
+
+        if partition_by:
+            # Percentage within groups
+            group_totals = result.groupby(partition_by)[col].transform('sum')
+            result[new_col] = (result[col] / group_totals * 100).round(decimal_places)
+            code_parts.append(f"df['{new_col}'] = (df['{col}'] / df.groupby({partition_by})['{col}'].transform('sum') * 100).round({decimal_places})")
+        else:
+            # Percentage of overall total
+            total = result[col].sum()
+            result[new_col] = (result[col] / total * 100).round(decimal_places) if total != 0 else 0
+            code_parts.append(f"df['{new_col}'] = (df['{col}'] / df['{col}'].sum() * 100).round({decimal_places})")
+
+    code = "\n".join(code_parts)
+    return result, code
+
+
+@register(TransformationType.BIN_NUMERIC)
+def bin_numeric(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame, str]:
+    """
+    Create bins/buckets from numeric values.
+
+    Parameters (from plan.parameters):
+        method: "quantile" (equal frequency), "fixed" (equal width), or "custom"
+        bins: Number of bins for quantile/fixed, or list of bin edges for custom
+        labels: Optional labels for bins
+        target_columns: Columns to bin
+        suffix: Suffix for new columns (default: "_bin")
+
+    Example (quantile):
+        values [1,2,3,4,5,6,7,8,9,10], bins=4
+        -> quartiles: "Q1", "Q2", "Q3", "Q4"
+
+    Example (custom):
+        values [15, 25, 35, 45], bins=[0, 18, 35, 65, 100]
+        -> ["0-18", "18-35", "35-65", "35-65"]
+    """
+    columns = plan.get_target_column_names()
+    method = plan.parameters.get("method", "quantile")
+    bins = plan.parameters.get("bins", 4)
+    labels = plan.parameters.get("labels")
+    suffix = plan.parameters.get("suffix", "_bin")
+
+    result = df.copy()
+    code_parts = []
+
+    for col in columns:
+        if col not in result.columns:
+            continue
+
+        new_col = f"{col}{suffix}"
+
+        if method == "quantile":
+            result[new_col] = pd.qcut(result[col], q=bins, labels=labels, duplicates='drop')
+            code_parts.append(f"df['{new_col}'] = pd.qcut(df['{col}'], q={bins}, labels={labels})")
+
+        elif method == "fixed":
+            result[new_col] = pd.cut(result[col], bins=bins, labels=labels)
+            code_parts.append(f"df['{new_col}'] = pd.cut(df['{col}'], bins={bins}, labels={labels})")
+
+        elif method == "custom" and isinstance(bins, list):
+            result[new_col] = pd.cut(result[col], bins=bins, labels=labels)
+            code_parts.append(f"df['{new_col}'] = pd.cut(df['{col}'], bins={bins}, labels={labels})")
+
+    code = "\n".join(code_parts)
+    return result, code
+
+
+@register(TransformationType.FLOOR_CEILING)
+def floor_ceiling(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame, str]:
+    """
+    Apply floor or ceiling to numeric values.
+
+    Parameters (from plan.parameters):
+        operation: "floor" or "ceiling" (default: "floor")
+        target_columns: Columns to transform
+
+    Example:
+        3.7 (floor) -> 3
+        3.2 (ceiling) -> 4
+    """
+    columns = plan.get_target_column_names()
+    operation = plan.parameters.get("operation", "floor")
+
+    result = df.copy()
+    code_parts = []
+
+    for col in columns:
+        if col not in result.columns:
+            continue
+
+        if operation == "floor":
+            result[col] = np.floor(result[col])
+            code_parts.append(f"df['{col}'] = np.floor(df['{col}'])")
+        elif operation == "ceiling":
+            result[col] = np.ceil(result[col])
+            code_parts.append(f"df['{col}'] = np.ceil(df['{col}'])")
+
+    code = "\n".join(code_parts)
+    return result, code

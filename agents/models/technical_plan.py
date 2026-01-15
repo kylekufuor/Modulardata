@@ -112,6 +112,21 @@ class TransformationType(str, Enum):
     """Reformat datetime column to a different string format."""
 
     # -------------------------------------------------------------------------
+    # Date Operations
+    # -------------------------------------------------------------------------
+    DATE_DIFF = "date_diff"
+    """Calculate difference between two date columns in days/months/years."""
+
+    DATE_ADD = "date_add"
+    """Add or subtract days/months/years from a date column."""
+
+    EXTRACT_DATE_PART = "extract_date_part"
+    """Extract year, month, day, weekday, quarter from datetime."""
+
+    DATE_TO_EPOCH = "date_to_epoch"
+    """Convert datetime to Unix timestamp (seconds since 1970)."""
+
+    # -------------------------------------------------------------------------
     # Numeric Operations
     # -------------------------------------------------------------------------
     ROUND_NUMBERS = "round_numbers"
@@ -122,6 +137,18 @@ class TransformationType(str, Enum):
 
     NORMALIZE = "normalize"
     """Normalize/scale numerical data (min-max or z-score)."""
+
+    ABS_VALUE = "abs_value"
+    """Convert numeric values to absolute values."""
+
+    PERCENT_OF_TOTAL = "percent_of_total"
+    """Calculate each value as percentage of column total."""
+
+    BIN_NUMERIC = "bin_numeric"
+    """Create bins/buckets from numeric values (quantile or fixed-width)."""
+
+    FLOOR_CEILING = "floor_ceiling"
+    """Apply floor or ceiling to numeric values."""
 
     # -------------------------------------------------------------------------
     # Text Operations
@@ -134,6 +161,18 @@ class TransformationType(str, Enum):
 
     MERGE_COLUMNS = "merge_columns"
     """Combine multiple columns into one."""
+
+    SUBSTRING = "substring"
+    """Extract part of a string by position or delimiter."""
+
+    PAD_STRING = "pad_string"
+    """Pad string to fixed length with specified character."""
+
+    CLEAN_TEXT = "clean_text"
+    """Remove special characters, keep only alphanumeric and spaces."""
+
+    REMOVE_HTML = "remove_html"
+    """Strip HTML tags from text content."""
 
     # -------------------------------------------------------------------------
     # Data Restructuring
@@ -173,6 +212,33 @@ class TransformationType(str, Enum):
 
     RANK = "rank"
     """Assign ranks to values in a column."""
+
+    # -------------------------------------------------------------------------
+    # Data Quality & Validation
+    # -------------------------------------------------------------------------
+    VALIDATE_FORMAT = "validate_format"
+    """Check if values match a pattern (email, phone, etc.) and flag invalid."""
+
+    MASK_DATA = "mask_data"
+    """Mask sensitive data (show only last N characters, etc.)."""
+
+    FLAG_DUPLICATES = "flag_duplicates"
+    """Add boolean column indicating duplicate rows."""
+
+    # -------------------------------------------------------------------------
+    # Advanced Operations
+    # -------------------------------------------------------------------------
+    CONDITIONAL_REPLACE = "conditional_replace"
+    """If-then-else logic for replacing values (CASE/WHEN)."""
+
+    COALESCE = "coalesce"
+    """Return first non-null value from multiple columns."""
+
+    EXPLODE = "explode"
+    """Expand list/array column into multiple rows."""
+
+    LAG_LEAD = "lag_lead"
+    """Shift column values up or down by N rows."""
 
     # -------------------------------------------------------------------------
     # Special Operations

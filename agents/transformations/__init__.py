@@ -30,6 +30,10 @@ from agents.transformations import restructuring
 from agents.transformations import column_math
 from agents.transformations import filtering
 from agents.transformations import aggregation
+from agents.transformations import string_ops
+from agents.transformations import date_ops
+from agents.transformations import validation
+from agents.transformations import advanced_ops
 
 __all__ = [
     "REGISTRY",
