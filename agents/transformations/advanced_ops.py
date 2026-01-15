@@ -150,6 +150,50 @@ def explode(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame, str]:
     return result, code
 
 
+@register(TransformationType.CUSTOM)
+def custom(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame, str]:
+    """
+    Execute custom pandas code.
+
+    Parameters (from plan.parameters):
+        code: Python/pandas code to execute (must use 'df' variable)
+
+    Security: Only allows safe operations (pd, np, basic math).
+
+    Example:
+        code="df['total'] = df['price'] * df['quantity']"
+    """
+    code_str = plan.parameters.get("code", "")
+
+    if not code_str:
+        return df.copy(), "# No code provided"
+
+    result = df.copy()
+
+    # Create safe evaluation context
+    safe_context = {
+        'df': result,
+        'pd': pd,
+        'np': np,
+        'abs': abs,
+        'round': round,
+        'min': min,
+        'max': max,
+        'sum': sum,
+        'len': len,
+    }
+
+    try:
+        # Execute the code
+        exec(code_str, {"__builtins__": {}}, safe_context)
+        # Get the modified df
+        result = safe_context['df']
+    except Exception as e:
+        raise ValueError(f"Custom code execution failed: {str(e)}")
+
+    return result, code_str
+
+
 @register(TransformationType.LAG_LEAD)
 def lag_lead(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame, str]:
     """

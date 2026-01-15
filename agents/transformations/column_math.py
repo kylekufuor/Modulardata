@@ -38,7 +38,7 @@ def add_column(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame, str
     Add a new calculated column.
 
     Parameters (from plan.parameters):
-        name: Name for the new column
+        name/new_name: Name for the new column
         expression: Python/pandas expression using 'df' to reference data
                    Example: "df['price'] * df['quantity']"
                    Example: "df['first_name'] + ' ' + df['last_name']"
@@ -48,7 +48,8 @@ def add_column(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame, str
     Example:
         expression="df['total'] / df['quantity']" creates unit_price column
     """
-    name = plan.parameters.get("name", "new_column")
+    # Support both 'name' and 'new_name' parameter names
+    name = plan.parameters.get("name") or plan.parameters.get("new_name", "new_column")
     expression = plan.parameters.get("expression", "")
 
     result = df.copy()

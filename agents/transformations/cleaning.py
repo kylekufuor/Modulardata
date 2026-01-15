@@ -112,8 +112,8 @@ def replace_values(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame,
     Find and replace values with regex support.
 
     Parameters (from plan.parameters):
-        old_value: Value or pattern to find
-        new_value: Replacement value
+        old_value/find: Value or pattern to find
+        new_value/replace: Replacement value
         regex: If True, treat old_value as regex pattern (default: False)
         target_columns: Columns to transform. If empty, applies to all.
 
@@ -122,9 +122,16 @@ def replace_values(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame,
         Pattern: r"^\\s+|\\s+$" removes leading/trailing whitespace
     """
     columns = plan.get_target_column_names()
-    old_value = plan.parameters.get("old_value")
-    new_value = plan.parameters.get("new_value", "")
+    # Support both old_value/new_value and find/replace parameter names
+    old_value = plan.parameters.get("old_value") or plan.parameters.get("find")
+    new_value = plan.parameters.get("new_value") or plan.parameters.get("replace", "")
     use_regex = plan.parameters.get("regex", False)
+
+    # Auto-detect regex if pattern looks like regex
+    if old_value and not use_regex:
+        # Check for common regex patterns
+        if any(c in str(old_value) for c in ['[', ']', '*', '+', '?', '^', '$', '\\', '|', '(', ')']):
+            use_regex = True
 
     result = df.copy()
 
