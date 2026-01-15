@@ -3,6 +3,10 @@
 # =============================================================================
 # Provides dependency injection for authentication.
 #
+# Supports both:
+# - ES256 (new Supabase JWT signing keys) via JWKS
+# - HS256 (legacy Supabase JWT secret) as fallback
+#
 # Usage:
 #   from app.auth import get_current_user, AuthUser
 #
@@ -14,10 +18,12 @@
 import logging
 from typing import Optional
 from uuid import UUID
+import httpx
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError, ExpiredSignatureError
+from jose import jwt, JWTError, ExpiredSignatureError, jwk
+from jose.exceptions import JWKError
 
 from app.config import settings
 from app.auth.models import AuthUser
@@ -28,6 +34,83 @@ logger = logging.getLogger(__name__)
 security = HTTPBearer()
 security_optional = HTTPBearer(auto_error=False)
 
+# Cache for JWKS keys
+_jwks_cache: dict = {}
+_jwks_cache_time: float = 0
+JWKS_CACHE_TTL = 3600  # 1 hour
+
+
+def _get_jwks_url() -> str:
+    """Get the JWKS URL from Supabase URL."""
+    # Extract project ref from SUPABASE_URL
+    # Format: https://<project-ref>.supabase.co
+    supabase_url = settings.SUPABASE_URL.rstrip('/')
+    return f"{supabase_url}/auth/v1/.well-known/jwks.json"
+
+
+def _fetch_jwks() -> dict:
+    """Fetch JWKS from Supabase with caching."""
+    import time
+    global _jwks_cache, _jwks_cache_time
+
+    current_time = time.time()
+
+    # Return cached if valid
+    if _jwks_cache and (current_time - _jwks_cache_time) < JWKS_CACHE_TTL:
+        return _jwks_cache
+
+    try:
+        jwks_url = _get_jwks_url()
+        response = httpx.get(jwks_url, timeout=10)
+        response.raise_for_status()
+        _jwks_cache = response.json()
+        _jwks_cache_time = current_time
+        logger.debug(f"Fetched JWKS from {jwks_url}")
+        return _jwks_cache
+    except Exception as e:
+        logger.warning(f"Failed to fetch JWKS: {e}")
+        # Return cached even if expired, as fallback
+        if _jwks_cache:
+            return _jwks_cache
+        return {"keys": []}
+
+
+def _get_signing_key(token: str) -> tuple[str, str]:
+    """
+    Get the appropriate signing key for a token.
+
+    Returns:
+        Tuple of (key, algorithm) to use for verification
+    """
+    # Decode header without verification to get algorithm and key ID
+    try:
+        unverified_header = jwt.get_unverified_header(token)
+    except JWTError:
+        # Fall back to HS256 if we can't read the header
+        return settings.SUPABASE_JWT_SECRET, "HS256"
+
+    alg = unverified_header.get("alg", "HS256")
+    kid = unverified_header.get("kid")
+
+    # If HS256, use the legacy secret
+    if alg == "HS256":
+        return settings.SUPABASE_JWT_SECRET, "HS256"
+
+    # For ES256 or other algorithms, use JWKS
+    if kid:
+        jwks = _fetch_jwks()
+        for key in jwks.get("keys", []):
+            if key.get("kid") == kid:
+                try:
+                    # Convert JWK to PEM format for jose
+                    return key, alg
+                except Exception as e:
+                    logger.warning(f"Failed to parse JWK: {e}")
+
+    # Fallback to HS256
+    logger.warning(f"Could not find key for alg={alg}, kid={kid}, falling back to HS256")
+    return settings.SUPABASE_JWT_SECRET, "HS256"
+
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security)
@@ -37,7 +120,7 @@ async def get_current_user(
 
     This dependency:
     1. Extracts the Bearer token from the Authorization header
-    2. Verifies the JWT signature using Supabase JWT secret
+    2. Verifies the JWT signature (supports ES256 and HS256)
     3. Validates the token hasn't expired
     4. Returns an AuthUser with the user's ID and email
 
@@ -58,12 +141,14 @@ async def get_current_user(
     token = credentials.credentials
 
     try:
+        # Get the appropriate signing key
+        signing_key, algorithm = _get_signing_key(token)
+
         # Decode and verify the JWT
-        # Supabase uses HS256 algorithm
         payload = jwt.decode(
             token,
-            settings.SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
+            signing_key,
+            algorithms=[algorithm],
             audience="authenticated"
         )
 
