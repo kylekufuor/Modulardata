@@ -26,6 +26,7 @@ COMPLETION_PROMISE=""
 PROMPT=""
 STATE_FILE="/tmp/ralph-loop-state-$$.json"
 LOG_FILE="/tmp/ralph-loop-log-$$.txt"
+AUTO_CONFIRM=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -38,6 +39,10 @@ while [[ $# -gt 0 ]]; do
             COMPLETION_PROMISE="$2"
             shift 2
             ;;
+        --yes|-y)
+            AUTO_CONFIRM=true
+            shift
+            ;;
         --help|-h)
             echo "Ralph Loop - Autonomous iteration for Claude Code"
             echo ""
@@ -46,6 +51,7 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --max-iterations N      Maximum iterations (default: 10)"
             echo "  --completion-promise S  String that signals completion"
+            echo "  --yes, -y               Skip confirmation prompts"
             echo "  --help, -h              Show this help"
             echo ""
             echo "Example:"
@@ -174,14 +180,14 @@ When complete, output: <promise>$COMPLETION_PROMISE</promise>"
         echo -e "${YELLOW}Running Claude Code...${NC}"
         echo ""
 
-        # Use script to capture output while still showing it
-        # The -q flag quiets script's own messages
-        if command -v script &> /dev/null; then
-            # macOS/BSD script syntax
-            script -q "$LOG_FILE" claude --print "$iteration_prompt" 2>&1 || true
+        # Run claude and capture output
+        # Using --print for non-interactive mode, unbuffered output
+        if command -v stdbuf &> /dev/null; then
+            stdbuf -oL claude --print "$iteration_prompt" 2>&1 | tee "$LOG_FILE" || true
         else
-            # Fallback: just pipe to tee
-            claude --print "$iteration_prompt" 2>&1 | tee "$LOG_FILE" || true
+            # Fallback: capture to file, then display
+            claude --print "$iteration_prompt" > "$LOG_FILE" 2>&1 || true
+            cat "$LOG_FILE"
         fi
 
         # Check for completion
@@ -229,12 +235,16 @@ fi
 echo -e "${YELLOW}⚠️  WARNING: This will run Claude Code autonomously up to $MAX_ITERATIONS times.${NC}"
 echo -e "${YELLOW}   This can consume significant API credits.${NC}"
 echo ""
-read -p "Continue? (y/N) " -n 1 -r
-echo ""
 
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborted."
-    exit 0
+if [[ "$AUTO_CONFIRM" != "true" ]]; then
+    read -p "Continue? (y/N) " -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Aborted."
+        exit 0
+    fi
+else
+    echo -e "${GREEN}Auto-confirmed with --yes flag${NC}"
 fi
 
 # Ensure we're in a git repo for safety
@@ -250,12 +260,13 @@ echo -e "${YELLOW}Current git status:${NC}"
 git status --short
 echo ""
 
-read -p "Proceed with ralph loop? (y/N) " -n 1 -r
-echo ""
-
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborted."
-    exit 0
+if [[ "$AUTO_CONFIRM" != "true" ]]; then
+    read -p "Proceed with ralph loop? (y/N) " -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Aborted."
+        exit 0
+    fi
 fi
 
 # Run the loop
