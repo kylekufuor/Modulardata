@@ -12,9 +12,9 @@ interface NodeDetailPanelProps {
 type Tab = 'preview' | 'code'
 
 interface NodeData {
-  rows: Record<string, unknown>[]
-  columns: string[]
-  total_rows: number
+  data: Record<string, unknown>[]
+  row_count: number
+  column_count: number
 }
 
 export default function NodeDetailPanel({ sessionId, node, onClose }: NodeDetailPanelProps) {
@@ -124,11 +124,11 @@ export default function NodeDetailPanel({ sessionId, node, onClose }: NodeDetail
 
             {/* Data Table */}
             <div className="flex-1 overflow-auto">
-              {nodeData && nodeData.rows.length > 0 ? (
+              {nodeData && nodeData.data.length > 0 ? (
                 <table className="min-w-full text-sm">
                   <thead className="bg-gray-50 sticky top-0">
                     <tr>
-                      {nodeData.columns.map((col) => (
+                      {Object.keys(nodeData.data[0]).map((col) => (
                         <th
                           key={col}
                           className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200"
@@ -139,9 +139,9 @@ export default function NodeDetailPanel({ sessionId, node, onClose }: NodeDetail
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {nodeData.rows.map((row, rowIdx) => (
+                    {nodeData.data.map((row, rowIdx) => (
                       <tr key={rowIdx} className="hover:bg-gray-50">
-                        {nodeData.columns.map((col) => (
+                        {Object.keys(nodeData.data[0]).map((col) => (
                           <td
                             key={col}
                             className="px-3 py-2 text-gray-700 whitespace-nowrap max-w-[200px] truncate"
@@ -163,7 +163,7 @@ export default function NodeDetailPanel({ sessionId, node, onClose }: NodeDetail
             {/* Row Count Footer */}
             {nodeData && (
               <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-500">
-                Showing {nodeData.rows.length} of {nodeData.total_rows.toLocaleString()} rows
+                Showing {nodeData.data.length} of {nodeData.row_count.toLocaleString()} rows
               </div>
             )}
           </div>
