@@ -16,7 +16,7 @@ from lib.supabase_client import SupabaseClient
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/auth", tags=["Auth"])
+router = APIRouter(tags=["Auth"])
 
 
 @router.get("/me", response_model=UserResponse)
