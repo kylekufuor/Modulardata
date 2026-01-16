@@ -356,15 +356,15 @@ export default function SessionPage() {
       }
       setMessages((prev) => [...prev, assistantMsg])
 
-      // Set plan if returned (plan mode)
-      if (response.plan) {
-        setCurrentPlan(response.plan)
-        setShowPlanPreview(true) // Show panel when new step added
-      }
-
       // In transform mode, reload data if transformation was applied
       if (chatMode === 'transform' && response.new_node_id) {
-        await loadSessionData()
+        await loadSessionData(true) // preserve messages
+        // Don't show plan preview in transform mode
+        setShowPlanPreview(false)
+      } else if (response.plan && response.plan.step_count > 0) {
+        // Plan mode: show plan preview when steps are added
+        setCurrentPlan(response.plan)
+        setShowPlanPreview(true)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message')

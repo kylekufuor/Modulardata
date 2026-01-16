@@ -74,13 +74,18 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """Response from chat endpoint in Plan Mode."""
+    """Response from chat endpoint."""
     session_id: str = Field(..., example="550e8400-e29b-41d4-a716-446655440000")
     message: str = Field(..., example="remove rows where email is blank")
     plan: SessionPlanResponse
     assistant_response: str = Field(
         ...,
         example="Added to plan: Remove rows where email column is empty or null.\n\nPlan now has 1 transformation(s). Keep adding or say 'apply' when ready."
+    )
+    new_node_id: str | None = Field(
+        default=None,
+        description="Node ID created when in transform mode (immediate execution)",
+        example="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
     )
 
     model_config = {
@@ -163,8 +168,8 @@ async def chat(
             detail="Use POST /api/v1/sessions/{session_id}/plan/apply to execute the plan"
         )
 
-    # Process with Strategist
-    return await _handle_chat_message(session_id_str, request.message)
+    # Process with Strategist (pass mode for plan vs transform behavior)
+    return await _handle_chat_message(session_id_str, request.message, request.mode)
 
 
 def _matches_command(message: str, patterns: list[str]) -> bool:
@@ -255,8 +260,104 @@ def _save_chat_messages(session_id: str, user_message: str, assistant_response: 
         logger.warning(f"Failed to save chat messages: {e}")
 
 
-async def _handle_chat_message(session_id: str, message: str) -> ChatResponse:
-    """Process a chat message through the Strategist with conversational AI."""
+async def _execute_transform_immediately(
+    session_id: str,
+    message: str,
+    technical_plan,
+    trans_type: str,
+    target_columns: list[str],
+) -> ChatResponse:
+    """Execute a transformation immediately (Transform Mode).
+
+    Instead of adding to a plan, this executes the transformation right away
+    using the Celery worker and waits for the result.
+    """
+    from workers.tasks import process_plan_apply
+
+    # Build step data for the worker
+    steps_data = [{
+        "step_number": 1,
+        "transformation_type": trans_type,
+        "target_columns": target_columns,
+        "parameters": technical_plan.parameters,
+        "explanation": technical_plan.explanation,
+    }]
+
+    # Create a temporary plan ID
+    import uuid
+    temp_plan_id = str(uuid.uuid4())
+
+    try:
+        # Submit task and wait for result (60 second timeout)
+        task = process_plan_apply.delay(
+            session_id=session_id,
+            plan_id=temp_plan_id,
+            steps=steps_data,
+            mode="all",
+        )
+
+        task_result = task.get(timeout=60)
+
+        if task_result.get("success"):
+            # Build success response
+            rows_before = task_result.get("rows_before", 0)
+            rows_after = task_result.get("rows_after", 0)
+            rows_affected = abs(rows_before - rows_after)
+
+            assistant_response = f"✅ Done! {technical_plan.explanation}\n\n"
+            if rows_affected > 0:
+                assistant_response += f"Affected {rows_affected:,} rows ({rows_before:,} → {rows_after:,}).\n\n"
+            assistant_response += "What else would you like to do?"
+
+            _save_chat_messages(session_id, message, assistant_response)
+
+            # Return with empty plan (transformation was executed, not queued)
+            plan = PlanService.get_or_create_plan(session_id)
+            return ChatResponse(
+                session_id=session_id,
+                message=message,
+                plan=SessionPlanResponse.from_plan(plan),
+                assistant_response=assistant_response,
+                new_node_id=task_result.get("node_id"),
+            )
+        else:
+            # Transformation failed
+            error_msg = task_result.get("error", "Unknown error")
+            assistant_response = f"❌ Transformation failed: {error_msg}\n\nPlease try a different approach."
+
+            _save_chat_messages(session_id, message, assistant_response)
+
+            plan = PlanService.get_or_create_plan(session_id)
+            return ChatResponse(
+                session_id=session_id,
+                message=message,
+                plan=SessionPlanResponse.from_plan(plan),
+                assistant_response=assistant_response,
+            )
+
+    except Exception as e:
+        logger.exception(f"Transform mode execution failed: {e}")
+        assistant_response = f"❌ Failed to execute transformation: {str(e)}\n\nPlease try again."
+
+        _save_chat_messages(session_id, message, assistant_response)
+
+        plan = PlanService.get_or_create_plan(session_id)
+        return ChatResponse(
+            session_id=session_id,
+            message=message,
+            plan=SessionPlanResponse.from_plan(plan),
+            assistant_response=assistant_response,
+        )
+
+
+async def _handle_chat_message(session_id: str, message: str, mode: str = "plan") -> ChatResponse:
+    """Process a chat message through the Strategist with conversational AI.
+
+    Args:
+        session_id: Session UUID
+        message: User's message
+        mode: "plan" to queue transformations, "transform" to execute immediately
+    """
     from agents.strategist import StrategistAgent
 
     try:
@@ -326,13 +427,27 @@ async def _handle_chat_message(session_id: str, message: str) -> ChatResponse:
                 assistant_response=assistant_response,
             )
 
-        # Add step to plan
         trans_type = technical_plan.transformation_type
         if hasattr(trans_type, 'value'):
             trans_type = trans_type.value
 
         target_columns = [tc.column_name for tc in technical_plan.target_columns] if technical_plan.target_columns else []
 
+        # =====================================================================
+        # TRANSFORM MODE: Execute immediately
+        # =====================================================================
+        if mode == "transform":
+            return await _execute_transform_immediately(
+                session_id=session_id,
+                message=message,
+                technical_plan=technical_plan,
+                trans_type=str(trans_type),
+                target_columns=target_columns,
+            )
+
+        # =====================================================================
+        # PLAN MODE: Add to plan for later execution
+        # =====================================================================
         plan = PlanService.add_step(
             session_id=session_id,
             transformation_type=str(trans_type),
