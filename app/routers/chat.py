@@ -146,14 +146,17 @@ async def chat(
 
     message_lower = request.message.lower().strip()
 
-    # Handle special commands
-    if message_lower in ["show plan", "show me the plan", "what's the plan", "plan"]:
+    # Handle special commands using flexible matching
+    # Show plan commands
+    if _matches_command(message_lower, ["show plan", "show me the plan", "what's the plan", "view plan"]):
         return await _handle_show_plan(session_id_str)
 
-    if message_lower in ["clear", "clear plan", "start over", "reset"]:
+    # Clear plan commands
+    if _matches_command(message_lower, ["clear", "clear plan", "start over", "start fresh", "reset", "reset plan"]):
         return await _handle_clear_plan(session_id_str)
 
-    if message_lower in ["apply", "do it", "execute", "apply plan", "apply changes"]:
+    # Apply plan commands
+    if _matches_command(message_lower, ["apply", "apply plan", "apply changes", "execute", "do it", "run it"]):
         # Redirect to apply endpoint
         raise HTTPException(
             status_code=400,
@@ -162,6 +165,35 @@ async def chat(
 
     # Process with Strategist
     return await _handle_chat_message(session_id_str, request.message)
+
+
+def _matches_command(message: str, patterns: list[str]) -> bool:
+    """
+    Check if message matches any command pattern using flexible matching.
+
+    Supports:
+    - Exact match: "clear plan"
+    - Contains match: "clear the plan and start fresh" matches "clear" and "plan"
+    - Prefix match: "clear plan please" starts with "clear plan"
+    """
+    # Exact match
+    if message in patterns:
+        return True
+
+    # Check for key phrases contained in message
+    for pattern in patterns:
+        # If pattern is in message and it's a significant part
+        if pattern in message:
+            return True
+
+        # Check for multi-word pattern components
+        pattern_words = pattern.split()
+        if len(pattern_words) > 1:
+            # All words from pattern should be in message
+            if all(word in message for word in pattern_words):
+                return True
+
+    return False
 
 
 async def _handle_show_plan(session_id: str) -> ChatResponse:

@@ -158,7 +158,13 @@ def classify_message(message: str) -> dict:
         "date", "number", "text", "string", "email", "phone", "csv", "table"
     ]
 
-    if any(kw in message_lower for kw in data_keywords):
+    # App commands - always on-topic
+    app_commands = [
+        "clear", "plan", "apply", "start fresh", "start over", "reset",
+        "show plan", "show me", "execute", "run", "do it"
+    ]
+
+    if any(kw in message_lower for kw in data_keywords) or any(cmd in message_lower for cmd in app_commands):
         return {
             "classification": "on_topic",
             "confidence": 0.95,
