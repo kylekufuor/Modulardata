@@ -89,29 +89,34 @@ export default function SessionPage() {
 
       // Only update messages if not preserving (e.g., after file upload with welcome message)
       if (!preserveMessages) {
-        // If there are nodes but no messages, generate a welcome message
-        if (history.nodes.length > 0 && history.messages.length === 0) {
-          const originalNode = history.nodes.find(n => !n.parent_id)
-          if (originalNode) {
-            try {
-              const profileData = await api.getNodeProfile(sessionId, originalNode.id)
-              const welcomeMsg = buildWelcomeMessageFromProfile(filename, profileData)
-              setMessages([{
-                id: `welcome-${Date.now()}`,
-                role: 'assistant',
-                content: welcomeMsg,
-                created_at: originalNode.created_at,
-              }])
-            } catch {
-              // If profile fetch fails, show simple welcome
-              setMessages([{
-                id: `welcome-${Date.now()}`,
-                role: 'assistant',
-                content: `Welcome! Your data "${filename}" has been loaded with ${originalNode.row_count.toLocaleString()} rows and ${originalNode.column_count} columns.\n\nWhat would you like to do with this data?`,
-                created_at: originalNode.created_at,
-              }])
+        const originalNode = history.nodes.find(n => !n.parent_id)
+        const needsWelcomeMessage = history.nodes.length > 0 && (
+          history.messages.length === 0 ||
+          history.messages[0]?.role === 'user'  // First message is from user, no welcome exists
+        )
+
+        if (needsWelcomeMessage && originalNode) {
+          // Generate welcome message and prepend it
+          let welcomeMsg: ChatMessageType
+          try {
+            const profileData = await api.getNodeProfile(sessionId, originalNode.id)
+            welcomeMsg = {
+              id: `welcome-${Date.now()}`,
+              role: 'assistant',
+              content: buildWelcomeMessageFromProfile(filename, profileData),
+              created_at: originalNode.created_at,
+            }
+          } catch {
+            // If profile fetch fails, show simple welcome
+            welcomeMsg = {
+              id: `welcome-${Date.now()}`,
+              role: 'assistant',
+              content: `Welcome! Your data "${filename}" has been loaded with ${originalNode.row_count.toLocaleString()} rows and ${originalNode.column_count} columns.\n\nWhat would you like to do with this data?`,
+              created_at: originalNode.created_at,
             }
           }
+          // Prepend welcome message to existing messages
+          setMessages([welcomeMsg, ...history.messages])
         } else {
           setMessages(history.messages)
         }
