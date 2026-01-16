@@ -223,13 +223,6 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
     return () => window.removeEventListener('keydown', handleEscape)
   }, [onClose])
 
-  // Get a short code preview (first few lines)
-  const getCodePreview = (code: string | undefined, maxLines: number = 6): string => {
-    if (!code) return ''
-    const lines = code.split('\n').filter(line => line.trim())
-    return lines.slice(0, maxLines).join('\n') + (lines.length > maxLines ? '\n...' : '')
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
@@ -344,22 +337,6 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
                     </p>
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* Code Preview (for transformation nodes) */}
-          {!isOriginal && nodeDetail?.transformation_code && (
-            <div className="px-4 py-3 border-b border-gray-200 flex-shrink-0">
-              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Code</h4>
-              <div
-                className="bg-gray-900 rounded-lg p-2 overflow-hidden cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
-                onClick={() => setActiveTab('code')}
-                title="Click to view full code"
-              >
-                <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap overflow-hidden max-h-[80px]">
-                  {getCodePreview(nodeDetail.transformation_code)}
-                </pre>
               </div>
             </div>
           )}
