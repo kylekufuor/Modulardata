@@ -11,6 +11,7 @@ interface NodeDetailPanelProps {
   onDataRefresh?: () => void
   onBranchFromNode?: (nodeId: string) => void
   onNodeRenamed?: (nodeId: string, newName: string) => void
+  onSelectNode?: (nodeId: string) => void
 }
 
 type Tab = 'preview' | 'code' | 'profile' | 'summary'
@@ -43,7 +44,7 @@ interface NodeProfile {
   issues?: DataIssue[]
 }
 
-export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, onDataRefresh, onBranchFromNode, onNodeRenamed }: NodeDetailPanelProps) {
+export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, onDataRefresh, onBranchFromNode, onNodeRenamed, onSelectNode }: NodeDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('preview')
   const [nodeData, setNodeData] = useState<NodeData | null>(null)
   const [nodeDetail, setNodeDetail] = useState<NodeDetail | null>(null)
@@ -380,10 +381,13 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
           {parentNode && (
             <div className="px-4 py-3 border-b border-gray-200">
               <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Input</h4>
-              <div className="p-2 bg-white rounded-lg border border-gray-200">
+              <button
+                onClick={() => onSelectNode?.(parentNode.id)}
+                className="w-full p-2 bg-white hover:bg-gray-50 rounded-lg border border-gray-200 transition-colors text-left"
+              >
                 <div className="flex items-center gap-2">
                   <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs font-medium text-gray-700 truncate">
                       {parentNode.transformation || 'Original Data'}
                     </p>
@@ -392,7 +396,7 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
                     </p>
                   </div>
                 </div>
-              </div>
+              </button>
             </div>
           )}
 

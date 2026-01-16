@@ -892,6 +892,7 @@ export default function SessionPage() {
               parentNode={selectedParentNode}
               onClose={() => setSelectedNodeId(null)}
               onDataRefresh={loadSessionData}
+              onSelectNode={(nodeId) => setSelectedNodeId(nodeId)}
             />
           )}
         </div>
