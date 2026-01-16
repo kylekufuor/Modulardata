@@ -76,14 +76,40 @@ export default function SessionPage() {
     try {
       // Fetch session details for module name
       const sessionDetails = await api.getSession(sessionId)
-      setModuleName(sessionDetails.original_filename || 'Untitled Module')
+      const filename = sessionDetails.original_filename || 'Untitled Module'
+      setModuleName(filename)
 
       const history: HistoryResponse = await api.getHistory(sessionId)
       setDataNodes(history.nodes)
 
       // Only update messages if not preserving (e.g., after file upload with welcome message)
       if (!preserveMessages) {
-        setMessages(history.messages)
+        // If there are nodes but no messages, generate a welcome message
+        if (history.nodes.length > 0 && history.messages.length === 0) {
+          const originalNode = history.nodes.find(n => !n.parent_id)
+          if (originalNode) {
+            try {
+              const profileData = await api.getNodeProfile(sessionId, originalNode.id)
+              const welcomeMsg = buildWelcomeMessageFromProfile(filename, profileData)
+              setMessages([{
+                id: `welcome-${Date.now()}`,
+                role: 'assistant',
+                content: welcomeMsg,
+                created_at: originalNode.created_at,
+              }])
+            } catch {
+              // If profile fetch fails, show simple welcome
+              setMessages([{
+                id: `welcome-${Date.now()}`,
+                role: 'assistant',
+                content: `Welcome! Your data "${filename}" has been loaded with ${originalNode.row_count.toLocaleString()} rows and ${originalNode.column_count} columns.\n\nWhat would you like to do with this data?`,
+                created_at: originalNode.created_at,
+              }])
+            }
+          }
+        } else {
+          setMessages(history.messages)
+        }
       }
 
       buildFlowGraph(history.nodes, history.current_node_id)
@@ -173,6 +199,44 @@ export default function SessionPage() {
     }
   }
 
+  // Build welcome message from profile API response (for page reload)
+  const buildWelcomeMessageFromProfile = (filename: string, profileData: { row_count: number; column_count: number; profile?: { columns?: Array<{ name: string; semantic_type: string; null_count: number }> } }): string => {
+    const { row_count, column_count, profile } = profileData
+    const columns = profile?.columns || []
+
+    let message = `Welcome back! 👋\n\n`
+    message += `I'm your data transformation assistant. Let's continue working on your data.\n\n`
+    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+    message += `📊 Your Data: ${filename}\n`
+    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+    message += `Rows: ${row_count.toLocaleString()}  |  Columns: ${column_count}\n\n`
+
+    if (columns.length > 0) {
+      message += `📋 Columns:\n`
+      columns.forEach((col) => {
+        const nullInfo = col.null_count > 0 ? ` (${col.null_count} missing)` : ''
+        message += `  • ${col.name} [${col.semantic_type}]${nullInfo}\n`
+      })
+
+      const columnsWithIssues = columns.filter(col => col.null_count > 0)
+        .sort((a, b) => b.null_count - a.null_count)
+
+      if (columnsWithIssues.length > 0) {
+        message += `\n⚠️ Issues Detected:\n`
+        columnsWithIssues.slice(0, 5).forEach((col) => {
+          const pct = row_count > 0 ? ((col.null_count / row_count) * 100).toFixed(1) : '0'
+          message += `  • ${col.null_count.toLocaleString()} missing ${col.name} (${pct}%)\n`
+        })
+      }
+    }
+
+    message += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+    message += `What would you like to do with this data?`
+
+    return message
+  }
+
+  // Build welcome message from upload response (for new upload)
   const buildWelcomeMessage = (response: UploadResponse): string => {
     const { filename, profile } = response
     const { row_count, column_count, columns } = profile
