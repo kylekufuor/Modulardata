@@ -1,7 +1,7 @@
 # ModularData Project Status
 
-> **Last Updated:** 2026-01-15
-> **Last Commit:** e2b29dc - Add module rename, delete, and replace file capabilities
+> **Last Updated:** 2026-01-16
+> **Last Commit:** d0122d8 - Add apply feedback and shorten node labels
 
 ---
 
@@ -9,29 +9,60 @@
 
 ### Deployment
 - **Backend:** Railway (web-production-2d224.up.railway.app)
-- **Frontend:** Pending deployment to Railway
+- **Frontend:** Railway
 - **Database:** Supabase PostgreSQL
 - **Storage:** Supabase Storage
 - **Task Queue:** Redis + Celery worker on Railway
 
-### Recent Changes (v1.1.0)
+### Recent Changes (Session: 2026-01-16)
 
-1. **UI Terminology Change:** Sessions are now displayed as "Modules" in the web interface
-2. **Module Type Selection Page:** New page at `/new-module` with cards for different module types (only CSV active, others greyed out with "Coming Soon")
-3. **Welcome Message:** Data profiler summary appears after file upload with column details and detected issues
-4. **Replace File Button:** Added to NodeDetailPanel for original data nodes
-5. **Module Rename:**
-   - PATCH endpoint at `/api/v1/sessions/{session_id}`
-   - Inline rename on dashboard module cards
-   - Rename in session page header
-6. **Module Delete:**
-   - 3-dot menu on module cards with Rename/Delete options
-   - Delete confirmation dialog before archiving
+#### Chat Persistence
+- **Messages now persist** in database across page reloads
+- Both user messages and assistant responses saved to `chat_logs` table
+- Welcome message saved when file is uploaded
+- Frontend prepends welcome message if missing from history (backwards compat)
 
-### Known Issues
+#### Welcome Message Redesign
+Changed from verbose format to **card-style**:
+```
+📊 customers.csv loaded!
 
-- **Local Testing:** Frontend gets "failed to fetch" errors locally - likely needs backend running locally or CORS/API URL configuration
-- **Recommended:** Test on deployed Railway instance instead of locally
+   15 rows  •  6 columns
+
+⚠️ Found 5 missing values across 4 columns
+   → email has the most (2 missing)
+
+How can I help clean this data?
+```
+
+#### Plan Mode UX Improvements
+1. **Apply suggestion timing:** Only suggests "apply" at 3+ steps (not at 1-2 steps)
+2. **Keep Adding button:** Added to plan panel to dismiss and continue adding transformations
+3. **Clear link:** Moved to small text link below buttons
+4. **Apply feedback:** Chat shows success message after applying plan:
+   ```
+   ✅ Done! Applied 2 transformations to your data.
+
+   Your data has been updated. What would you like to do next?
+   ```
+
+#### Node Labels
+Shortened verbose transformation labels:
+- **Before:** "Fill null or missing values in the email column with the placeholder 'no email'; Fill missing values in the age column with 99"
+- **After:** "Fill nulls in email, age" or "2 transformations on email, age"
+
+#### Guardrails (from earlier session)
+- Added topic classification to keep chat focused on data transformation
+- Off-topic messages get friendly redirect back to data tasks
+- App commands ("clear plan", "show plan") always recognized as on-topic
+
+### Commits from Today's Session
+```
+d0122d8 Add apply feedback and shorten node labels
+c469ddf Improve welcome message, plan UX, and apply suggestions
+6ee9318 Prepend welcome message if missing from chat history
+5a5a93a Persist chat messages to database for session continuity
+```
 
 ---
 
@@ -44,11 +75,19 @@ app/
 ├── auth.py              # Supabase JWT authentication
 ├── routers/
 │   ├── sessions.py      # CRUD + PATCH for rename
-│   ├── upload.py        # CSV upload with profiling
-│   ├── chat.py          # AI transformation interface
+│   ├── upload.py        # CSV upload with profiling + welcome message
+│   ├── chat.py          # AI chat with message persistence
 │   ├── data.py          # Data access/download
-│   ├── history.py       # Version control/rollback
+│   ├── history.py       # Version control/rollback + message retrieval
 │   └── tasks.py         # Async task status
+agents/
+├── guardrails.py        # Topic classification for chat focus
+├── response_generator.py # Friendly AI responses
+├── strategist.py        # Transformation planning
+├── engineer.py          # Code execution
+└── tester.py            # Validation
+workers/
+└── tasks.py             # Celery tasks with short node labels
 ```
 
 ### Frontend (React + Vite)
@@ -57,10 +96,12 @@ frontend/src/
 ├── pages/
 │   ├── DashboardPage.tsx    # Module list with 3-dot menu
 │   ├── NewModulePage.tsx    # Module type selection
-│   ├── SessionPage.tsx      # Chat + node graph + rename
+│   ├── SessionPage.tsx      # Chat + node graph + plan panel
 │   └── AuthPage.tsx         # Login/signup
 ├── components/
-│   ├── NodeDetailPanel.tsx  # Data preview + replace file
+│   ├── NodeDetailPanel.tsx  # Modal with data preview + profile
+│   ├── ChatMessage.tsx      # Chat bubble with avatar + formatting
+│   ├── ThinkingIndicator.tsx # Animated dots while AI processes
 │   └── DataNode.tsx         # React Flow node
 ├── lib/
 │   ├── api.ts               # API client with auth
@@ -75,9 +116,25 @@ frontend/src/
 | `/api/v1/sessions/{id}` | GET | Get module details |
 | `/api/v1/sessions/{id}` | PATCH | Rename module |
 | `/api/v1/sessions/{id}` | DELETE | Archive module |
-| `/api/v1/sessions/{id}/upload` | POST | Upload CSV |
-| `/api/v1/sessions/{id}/chat` | POST | Send transformation instruction |
+| `/api/v1/sessions/{id}/upload` | POST | Upload CSV (saves welcome msg) |
+| `/api/v1/sessions/{id}/chat` | POST | Send message (persists to DB) |
+| `/api/v1/sessions/{id}/history` | GET | Get nodes + chat messages |
 | `/api/v1/sessions/{id}/plan/apply` | POST | Execute transformations |
+
+---
+
+## Key Files Modified Today
+
+| File | Changes |
+|------|---------|
+| `app/routers/chat.py` | Added `_save_chat_messages()`, persist all messages |
+| `app/routers/upload.py` | Card-style welcome message, save to chat_logs |
+| `agents/response_generator.py` | Only suggest apply at 3+ steps |
+| `agents/guardrails.py` | Topic classification (earlier) |
+| `workers/tasks.py` | `create_short_node_label()` for concise node names |
+| `frontend/src/pages/SessionPage.tsx` | Chat persistence, welcome prepend, Keep Adding button, apply feedback |
+| `frontend/src/components/ChatMessage.tsx` | Chat bubble formatting |
+| `frontend/src/components/ThinkingIndicator.tsx` | Animated thinking dots |
 
 ---
 
@@ -93,19 +150,10 @@ frontend/src/
 
 ## Next Steps (When Resuming)
 
-1. **Test on Railway:** User will test deployed frontend and report results
-2. **Potential Issues to Watch:**
-   - Authentication flow
-   - API connectivity
-   - Module CRUD operations (create, rename, delete)
-   - File upload and data profiling
-   - Chat and transformation flow
-
-3. **Future Module Types (Greyed Out):**
-   - Excel Transformation
-   - JSON Transformation
-   - Text/Log Transformation
-   - Custom Integration
+1. **Transform Mode:** Implement immediate execution (bypass plan queue)
+2. **Real-time updates:** WebSocket for live node creation feedback
+3. **Undo/Redo:** Test rollback functionality in UI
+4. **Error handling:** Better user feedback for transformation failures
 
 ---
 
@@ -113,7 +161,6 @@ frontend/src/
 
 - **Documentation Index:** `docs/INDEX.md`
 - **API Reference:** `docs/users/API_REFERENCE.md`
-- **Changelog:** `docs/users/CHANGELOG.md`
 - **Architecture:** `docs/internal/ARCHITECTURE.md`
 
 ---
