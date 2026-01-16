@@ -37,6 +37,7 @@ export default function NodeDetailPanel({ sessionId, node, onClose, onDataRefres
   const [nodeProfile, setNodeProfile] = useState<NodeProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [profileLoading, setProfileLoading] = useState(false)
+  const [profileError, setProfileError] = useState('')
   const [error, setError] = useState('')
   const [replacing, setReplacing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -76,20 +77,26 @@ export default function NodeDetailPanel({ sessionId, node, onClose, onDataRefres
 
   const loadNodeProfile = async () => {
     setProfileLoading(true)
+    setProfileError('')
     try {
       const response = await api.getNodeProfile(sessionId, node.id)
       console.log('Profile API response:', response)
       // API returns { row_count, column_count, profile: { row_count, column_count, columns, issues } }
       // The profile field contains the full DataProfile object
-      const profile = response.profile || {}
+      const profile = response?.profile || {}
+      const columns = Array.isArray(profile.columns) ? profile.columns : []
       setNodeProfile({
-        row_count: profile.row_count || response.row_count || 0,
-        column_count: profile.column_count || response.column_count || 0,
-        columns: profile.columns || [],
-        issues: profile.issues || [],
+        row_count: profile.row_count || response?.row_count || 0,
+        column_count: profile.column_count || response?.column_count || 0,
+        columns: columns,
+        issues: Array.isArray(profile.issues) ? profile.issues : [],
       })
+      if (columns.length === 0) {
+        setProfileError('Profile data has no columns')
+      }
     } catch (err) {
       console.error('Failed to load node profile:', err)
+      setProfileError(err instanceof Error ? err.message : 'Failed to load profile')
     } finally {
       setProfileLoading(false)
     }
@@ -415,9 +422,15 @@ export default function NodeDetailPanel({ sessionId, node, onClose, onDataRefres
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-gray-400 p-6">
-                <p>No profile data available</p>
-                <p className="text-xs mt-2">
-                  {nodeProfile ? `Columns: ${nodeProfile.columns.length}` : 'Profile not loaded'}
+                <p className="text-gray-600 font-medium">No profile data available</p>
+                {profileError && (
+                  <p className="text-red-500 text-sm mt-2">{profileError}</p>
+                )}
+                <p className="text-xs mt-2 text-gray-400">
+                  {nodeProfile ? `Columns found: ${nodeProfile.columns.length}` : 'Profile not loaded'}
+                </p>
+                <p className="text-xs mt-1 text-gray-400">
+                  Node ID: {node.id.slice(0, 8)}... | Original: {isOriginal ? 'Yes' : 'No'}
                 </p>
               </div>
             )
