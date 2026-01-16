@@ -24,7 +24,7 @@ from app.exceptions import (
     modulardata_exception_handler,
     validation_exception_handler,
 )
-from app.routers import health, sessions, upload, data, tasks, chat, history, runs
+from app.routers import health, sessions, upload, data, tasks, chat, history, runs, samples
 from app.auth import routes as auth_routes
 from app.websocket import routes as websocket_routes
 
@@ -324,6 +324,13 @@ app.include_router(
     runs.router,
     prefix="/api/v1/sessions",
     tags=["Runs"]
+)
+
+# Sample Data endpoints
+app.include_router(
+    samples.router,
+    prefix="/api/v1",
+    tags=["Samples"]
 )
 
 # WebSocket endpoints (Real-time updates)

@@ -1,0 +1,40 @@
+{
+  "samples": [
+    {
+      "id": "marketing_leads",
+      "name": "Marketing Leads",
+      "filename": "messy_marketing_leads.csv",
+      "description": "Messy marketing leads with inconsistent names, phone formats, dates, and duplicates",
+      "issues": ["Mixed case names", "Inconsistent phone formats", "Various date formats", "Duplicate rows", "Missing values"],
+      "rows": 13,
+      "columns": 10
+    },
+    {
+      "id": "customer_list",
+      "name": "Customer List",
+      "filename": "dirty_customer_list.csv",
+      "description": "Customer database with duplicates, missing emails, and inconsistent formatting",
+      "issues": ["Duplicate customers", "Missing emails", "Inconsistent city/state casing", "Mixed currency formats"],
+      "rows": 12,
+      "columns": 9
+    },
+    {
+      "id": "sales_data",
+      "name": "Sales Data",
+      "filename": "sales_data_raw.csv",
+      "description": "Sales records with price format issues, inconsistent categories, and messy dates",
+      "issues": ["Mixed price formats ($, USD, dollars)", "Inconsistent discount formats", "Category casing issues", "Duplicate orders"],
+      "rows": 13,
+      "columns": 10
+    },
+    {
+      "id": "survey_responses",
+      "name": "Survey Responses",
+      "filename": "survey_responses.csv",
+      "description": "Survey data with free-text cleanup needs and inconsistent yes/no responses",
+      "issues": ["Age as text (thirty-two)", "Inconsistent gender formats", "Yes/No/Y/N variations", "Extra whitespace in feedback"],
+      "rows": 12,
+      "columns": 9
+    }
+  ]
+}

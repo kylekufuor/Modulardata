@@ -18,6 +18,8 @@ import DataNode from '../components/DataNode'
 import NodeDetailPanel from '../components/NodeDetailPanel'
 import ChatMessageBubble from '../components/ChatMessage'
 import ThinkingIndicator from '../components/ThinkingIndicator'
+import QuickActions from '../components/QuickActions'
+import TransformationSuggestions from '../components/TransformationSuggestions'
 
 type ChatMode = 'plan' | 'transform'
 
@@ -53,6 +55,20 @@ export default function SessionPage() {
   const [sending, setSending] = useState(false)
   const [applyingPlan, setApplyingPlan] = useState(false)
   const [error, setError] = useState('')
+
+  // Data profile for suggestions
+  const [dataProfile, setDataProfile] = useState<{
+    row_count: number
+    column_count: number
+    columns: Array<{
+      name: string
+      dtype: string
+      semantic_type: string
+      null_count: number
+      null_percent: number
+    }>
+  } | null>(null)
+  const [showSuggestions, setShowSuggestions] = useState(true)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
@@ -125,6 +141,15 @@ export default function SessionPage() {
           let welcomeMsg: ChatMessageType
           try {
             const profileData = await api.getNodeProfile(sessionId, originalNode.id)
+            // Store profile for suggestions
+            if (profileData.profile) {
+              setDataProfile({
+                row_count: profileData.row_count,
+                column_count: profileData.column_count,
+                columns: profileData.profile.columns || [],
+              })
+              setShowSuggestions(true)
+            }
             welcomeMsg = {
               id: `welcome-${Date.now()}`,
               role: 'assistant',
@@ -144,6 +169,23 @@ export default function SessionPage() {
           setMessages([welcomeMsg, ...history.messages])
         } else {
           setMessages(history.messages)
+          // Load profile for existing sessions with data
+          const originalNode = history.nodes.find(n => !n.parent_id)
+          if (originalNode && history.nodes.length === 1) {
+            try {
+              const profileData = await api.getNodeProfile(sessionId, originalNode.id)
+              if (profileData.profile) {
+                setDataProfile({
+                  row_count: profileData.row_count,
+                  column_count: profileData.column_count,
+                  columns: profileData.profile.columns || [],
+                })
+                setShowSuggestions(true)
+              }
+            } catch {
+              // Ignore profile fetch errors
+            }
+          }
         }
       }
 
@@ -253,6 +295,16 @@ export default function SessionPage() {
 
     try {
       const response: UploadResponse = await api.uploadFile(sessionId, file)
+
+      // Store profile for suggestions
+      if (response.profile) {
+        setDataProfile({
+          row_count: response.profile.row_count,
+          column_count: response.profile.column_count,
+          columns: response.profile.columns || [],
+        })
+        setShowSuggestions(true)
+      }
 
       // Build welcome message with data profiler
       const welcomeMessage = buildWelcomeMessage(response)
@@ -618,35 +670,29 @@ export default function SessionPage() {
           {/* Chat Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {dataNodes.length === 0 ? (
-              /* Upload prompt - shown before any data is uploaded */
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-                  <Upload className="w-8 h-8 text-blue-600" />
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  Upload a CSV file to get started
-                </h3>
-                <p className="text-gray-600 mb-6 max-w-xs">
-                  I'll analyze your data and help you clean, transform, and prepare it through conversation.
-                </p>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {uploading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Upload className="w-4 h-4" />
-                  )}
-                  {uploading ? 'Uploading...' : 'Upload CSV'}
-                </button>
-              </div>
+              /* Quick Actions - shown before any data is uploaded */
+              <QuickActions
+                sessionId={sessionId || ''}
+                onUploadClick={() => fileInputRef.current?.click()}
+                onSampleUploaded={() => loadSessionData()}
+                uploading={uploading}
+              />
             ) : (
               <>
                 {messages.map((msg) => (
                   <ChatMessageBubble key={msg.id} message={msg} />
                 ))}
+                {/* Transformation suggestions - show after welcome for original data only */}
+                {showSuggestions && dataProfile && dataNodes.length === 1 && !sending && (
+                  <TransformationSuggestions
+                    profile={dataProfile}
+                    onSuggestionClick={(message) => {
+                      setInputMessage(message)
+                      setShowSuggestions(false)
+                    }}
+                    onDismiss={() => setShowSuggestions(false)}
+                  />
+                )}
                 {sending && <ThinkingIndicator />}
                 <div ref={chatEndRef} />
               </>

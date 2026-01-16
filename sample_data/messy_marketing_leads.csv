@@ -1,0 +1,14 @@
+lead_id,first_name,last_name,email,phone_number,company,campaign_source,lead_score,created_date,status
+1001,  John ,Smith,JOHN.SMITH@ACME.COM,(555) 123-4567,Acme Corp,google ads,85,01/15/2024,QUALIFIED
+1002,sarah,johnson,sarah.j@techstart.io,555.234.5678,TechStart Inc,LinkedIn,seventy-two,2024-01-16,Contacted
+1003,MICHAEL,WILLIAMS,m.williams@bigco.net,5553456789,BigCo Industries,email campaign,91,Jan 17 2024,converted
+1004,Emily,  Brown  ,emily.brown@startup.co,555-456-7890,,Facebook Ads,45,2024/01/18,NEW
+1005,david,Jones,D.JONES@ENTERPRISE.COM,+1 555 567 8901,Enterprise LLC,referral,88,01-19-2024,qualified
+1006,Jennifer,Davis,jen.davis@smallbiz.net,(555)678-9012,Small Biz Inc,Google Ads,63,1/20/2024,  contacted
+1007,ROBERT,miller,robert.m@megacorp.com,555 789 0123,MegaCorp,Trade Show,79,2024-01-21,Qualifed
+1008,lisa,Wilson,LISA.WILSON@AGENCY.CO,5558901234,The Agency,linkedin,fifty-five,01/22/24,new
+1009,James,taylor,james.t@consulting.io,555-901-2345,Consulting Group,Email Campaign,94,January 23, 2024,CONVERTED
+1010,AMANDA,Anderson,a.anderson@retail.com,(555) 012-3456,Retail Masters,Referral,67,2024-1-24,contacted
+1003,MICHAEL,WILLIAMS,m.williams@bigco.net,5553456789,BigCo Industries,email campaign,91,Jan 17 2024,converted
+1011,  chris  ,martinez,CHRIS.M@NEWCO.IO,555---111---2222,NewCo,,42,24/01/2024,
+1012,Nancy,Drew,nancy@detective.com,N/A,Drew Investigations,Cold Call,n/a,2024-01-26,pending

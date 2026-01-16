@@ -241,4 +241,37 @@ export const api = {
 
     return response.json()
   },
+
+  // Sample Data
+  listSamples: () => fetchWithAuth('/api/v1/samples'),
+
+  getSampleContent: (sampleId: string) => fetchWithAuth(`/api/v1/samples/${sampleId}/content`),
+
+  uploadSample: async (sessionId: string, sampleId: string) => {
+    // Fetch sample content and upload as file
+    const sampleData = await fetchWithAuth(`/api/v1/samples/${sampleId}/content`)
+    const blob = new Blob([sampleData.content], { type: 'text/csv' })
+    const file = new File([blob], sampleData.filename, { type: 'text/csv' })
+
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) throw new Error('Not authenticated')
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await fetch(`${API_URL}/api/v1/sessions/${sessionId}/upload`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Upload failed' }))
+      throw new Error(error.detail || 'Upload failed')
+    }
+
+    return response.json()
+  },
 }

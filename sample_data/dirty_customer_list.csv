@@ -1,0 +1,13 @@
+customer_id,full_name,email_address,phone,city,state,signup_date,total_purchases,last_order
+C001,john doe,JOHNDOE@GMAIL.COM,(212) 555-1234,new york,NY,2023-05-15,1250.00,2024-01-10
+C002,JANE SMITH,jane.smith@yahoo.com,3105559876,Los Angeles,california,05/20/2023,$890.50,Jan 5 2024
+C003,  Bob Johnson  ,bob.j@outlook.com,555.444.3333,chicago,IL,2023-06-01,2100,2024-01-15
+C001,john doe,JOHNDOE@GMAIL.COM,(212) 555-1234,new york,NY,2023-05-15,1250.00,2024-01-10
+C004,alice williams,ALICE@COMPANY.ORG,,San Francisco,ca,June 15, 2023,$500.00,12/28/2023
+C005,CHARLIE BROWN,,+1-555-222-4444,Seattle,Washington,2023/07/01,750,2024-01-20
+C006,diana prince,diana.p@email.net,5551112222,austin,TX,07-15-2023,1800.99,January 8, 2024
+C002,JANE SMITH,jane.smith@yahoo.com,3105559876,Los Angeles,california,05/20/2023,$890.50,Jan 5 2024
+C007,edward norton,ed.norton@mail.com,(555) 333 4444,Denver,CO,2023-08-01,,2024-01-12
+C008,  FRANK CASTLE  ,frank@punisher.com,N/A,New York,ny,August 10 2023,$3200,
+C009,grace kelly,grace.k@movies.com,555-999-8888,miami,Florida,2023-09-01,450.75,2024-01-18
+C010,henry ford,HENRY@MOTORS.COM,(555)777-6666,Detroit,MI,09/15/2023,5000,2024-01-22
