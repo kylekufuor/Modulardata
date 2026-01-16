@@ -314,7 +314,20 @@ export default function SessionPage() {
     setApplyingPlan(true)
     const stepCount = currentPlan.step_count
     try {
-      await api.applyPlan(sessionId)
+      const result = await api.applyPlan(sessionId)
+
+      // Check if the transformation succeeded
+      if (!result.success) {
+        const errorMsg: ChatMessageType = {
+          id: `apply-error-${Date.now()}`,
+          role: 'assistant',
+          content: `❌ Transformation failed: ${result.error || result.message || 'Unknown error'}\n\nPlease try a different approach or modify your request.`,
+          created_at: new Date().toISOString(),
+        }
+        setMessages((prev) => [...prev, errorMsg])
+        setError(result.error || result.message || 'Transformation failed')
+        return
+      }
 
       // Add success message to chat
       const successMsg: ChatMessageType = {

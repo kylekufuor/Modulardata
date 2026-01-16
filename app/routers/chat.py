@@ -480,7 +480,7 @@ async def apply_plan(
                 message=f"No valid steps found for numbers: {request.step_numbers}",
             )
 
-    # Submit to Celery worker
+    # Submit to Celery worker and wait for completion
     try:
         from workers.tasks import process_plan_apply
 
@@ -496,27 +496,37 @@ async def apply_plan(
             for s in steps_to_apply
         ]
 
-        # Submit async task
-        result = process_plan_apply.delay(
+        # Submit task and wait for result (with timeout)
+        task = process_plan_apply.delay(
             session_id=session_id_str,
             plan_id=plan.id,
             steps=steps_data,
             mode=mode,
         )
 
-        return ApplyPlanResponse(
-            success=True,
-            message=f"Applying {len(steps_to_apply)} transformation(s). Task ID: {result.id}",
-        )
+        # Wait for task to complete (60 second timeout)
+        task_result = task.get(timeout=60)
+
+        if task_result.get("success"):
+            return ApplyPlanResponse(
+                success=True,
+                message=f"Applied {len(steps_to_apply)} transformation(s) successfully.",
+                node_id=task_result.get("node_id"),
+            )
+        else:
+            return ApplyPlanResponse(
+                success=False,
+                error=task_result.get("error", "Unknown error"),
+                message="Transformation failed.",
+            )
 
     except Exception as e:
-        logger.exception(f"Failed to submit plan: {e}")
+        logger.exception(f"Failed to apply plan: {e}")
 
-        # Fallback: Try synchronous execution for testing
         return ApplyPlanResponse(
             success=False,
             error=str(e),
-            message="Failed to submit plan. Is Redis running?",
+            message="Failed to apply plan. Please try again.",
         )
 
 

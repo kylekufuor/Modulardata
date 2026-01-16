@@ -56,21 +56,27 @@ def drop_rows(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame, str]
     If conditions are empty but target_columns are provided, we infer:
         - Remove rows where any target column is null OR empty string
 
+    If BOTH conditions and target_columns are empty:
+        - Remove rows where ANY column has null values (dropna behavior)
+
     Example:
         Remove rows where email is null
         conditions = [FilterCondition(column="email", operator="isnull")]
     """
     from agents.models.technical_plan import FilterCondition, FilterOperator
 
-    # If no conditions but target_columns are provided, infer null/empty check
     conditions = plan.conditions
-    if not conditions and plan.target_columns:
-        # Build conditions for "isnull or empty" for each target column
-        conditions = [
-            FilterCondition(column=tc.column_name, operator=FilterOperator.ISNULL)
-            for tc in plan.target_columns
-        ]
 
+    # Case 1: No conditions AND no target_columns
+    # Interpret as "drop rows with ANY null values" (dropna behavior)
+    if not conditions and not plan.target_columns:
+        result = df.dropna().copy()
+        code = "df = df.dropna()"
+        return result, code
+
+    # Case 2: No conditions but target_columns are provided
+    # Remove rows where any target column is null OR empty string
+    if not conditions and plan.target_columns:
         # Build mask for null OR empty
         target_cols = plan.get_target_column_names()
         mask = pd.Series([False] * len(df), index=df.index)
@@ -89,7 +95,7 @@ def drop_rows(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame, str]
         code = f"df = df[~({condition_code})]"
         return result, code
 
-    # Standard path with explicit conditions
+    # Case 3: Explicit conditions provided
     mask = build_condition_mask(df, conditions)
     result = df[~mask].copy()
 
