@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { X, Loader2, Table, Code, BarChart3, Upload, GitBranch, FileSpreadsheet, ArrowRight, ChevronRight, Pencil, Check, Download } from 'lucide-react'
+import { X, Loader2, Table, Code, BarChart3, Upload, GitBranch, FileSpreadsheet, ArrowRight, ChevronRight, Pencil, Check, Download, ClipboardList } from 'lucide-react'
 import { api } from '../lib/api'
 import type { Node, ColumnProfile } from '../types'
 
@@ -13,7 +13,7 @@ interface NodeDetailPanelProps {
   onNodeRenamed?: (nodeId: string, newName: string) => void
 }
 
-type Tab = 'preview' | 'code' | 'profile'
+type Tab = 'preview' | 'code' | 'profile' | 'summary'
 
 interface NodeData {
   data: Record<string, unknown>[]
@@ -48,6 +48,7 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
   const [nodeData, setNodeData] = useState<NodeData | null>(null)
   const [nodeDetail, setNodeDetail] = useState<NodeDetail | null>(null)
   const [nodeProfile, setNodeProfile] = useState<NodeProfile | null>(null)
+  const [parentProfile, setParentProfile] = useState<NodeProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [profileLoading, setProfileLoading] = useState(false)
   const [profileError, setProfileError] = useState('')
@@ -77,6 +78,12 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
     loadNodeDetail()
     if (isOriginal) {
       loadNodeProfile()
+    } else {
+      // For transformation nodes, load both current and parent profiles for comparison
+      loadNodeProfile()
+      if (parentNode) {
+        loadParentProfile(parentNode.id)
+      }
     }
   }, [node.id])
 
@@ -127,6 +134,22 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
       setProfileError(err instanceof Error ? err.message : 'Failed to load profile')
     } finally {
       setProfileLoading(false)
+    }
+  }
+
+  const loadParentProfile = async (parentId: string) => {
+    try {
+      const response = await api.getNodeProfile(sessionId, parentId)
+      const profile = response?.profile || {}
+      const columns = Array.isArray(profile.columns) ? profile.columns : []
+      setParentProfile({
+        row_count: profile.row_count || response?.row_count || 0,
+        column_count: profile.column_count || response?.column_count || 0,
+        columns: columns,
+        issues: Array.isArray(profile.issues) ? profile.issues as DataIssue[] : [],
+      })
+    } catch (err) {
+      console.error('Failed to load parent profile:', err)
     }
   }
 
@@ -443,6 +466,19 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
                   <Table className="w-4 h-4" />
                   Preview
                 </button>
+                {!isOriginal && (
+                  <button
+                    onClick={() => setActiveTab('summary')}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                      activeTab === 'summary'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <ClipboardList className="w-4 h-4" />
+                    Summary
+                  </button>
+                )}
                 {isOriginal && (
                   <button
                     onClick={() => setActiveTab('profile')}
@@ -668,6 +704,129 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
                 </p>
               </div>
             )
+          )}
+
+          {activeTab === 'summary' && (
+            <div className="h-full overflow-auto p-6">
+              {/* What Changed Section */}
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">What Changed</h3>
+                {node.step_descriptions && node.step_descriptions.length > 0 ? (
+                  <div className="space-y-2">
+                    {node.step_descriptions.map((desc, idx) => (
+                      <div key={idx} className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                        <span className="flex-shrink-0 w-6 h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-medium">
+                          {idx + 1}
+                        </span>
+                        <span className="text-sm text-gray-700">{desc}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">
+                    {node.transformation || 'No transformation details available'}
+                  </p>
+                )}
+              </div>
+
+              {/* Before/After Comparison */}
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Before & After</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Before */}
+                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Before</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Rows</span>
+                        <span className="font-medium text-gray-900">{parentNode?.row_count.toLocaleString() || '-'}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Columns</span>
+                        <span className="font-medium text-gray-900">{parentNode?.column_count || '-'}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Total Nulls</span>
+                        <span className="font-medium text-gray-900">
+                          {parentProfile?.columns.reduce((sum, col) => sum + col.null_count, 0).toLocaleString() || '-'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  {/* After */}
+                  <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                    <h4 className="text-xs font-semibold text-emerald-600 uppercase tracking-wide mb-3">After</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Rows</span>
+                        <span className="font-medium text-gray-900">{node.row_count.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Columns</span>
+                        <span className="font-medium text-gray-900">{node.column_count}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Total Nulls</span>
+                        <span className="font-medium text-gray-900">
+                          {nodeProfile?.columns.reduce((sum, col) => sum + col.null_count, 0).toLocaleString() || '-'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Column Changes */}
+              {nodeProfile && parentProfile && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Column Changes</h3>
+                  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase">Column</th>
+                          <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-600 uppercase">Nulls Before</th>
+                          <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-600 uppercase">Nulls After</th>
+                          <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-600 uppercase">Change</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {nodeProfile.columns.map((col) => {
+                          const parentCol = parentProfile.columns.find(p => p.name === col.name)
+                          const nullsBefore = parentCol?.null_count || 0
+                          const nullsAfter = col.null_count
+                          const change = nullsAfter - nullsBefore
+                          const hasChange = change !== 0
+
+                          return (
+                            <tr key={col.name} className={hasChange ? 'bg-amber-50' : ''}>
+                              <td className="px-4 py-2.5 font-medium text-gray-900">{col.name}</td>
+                              <td className="px-4 py-2.5 text-right text-gray-600">{nullsBefore}</td>
+                              <td className="px-4 py-2.5 text-right text-gray-600">{nullsAfter}</td>
+                              <td className="px-4 py-2.5 text-right">
+                                {hasChange ? (
+                                  <span className={change < 0 ? 'text-emerald-600 font-medium' : 'text-red-600 font-medium'}>
+                                    {change > 0 ? '+' : ''}{change}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {profileLoading && (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                </div>
+              )}
+            </div>
           )}
 
           {activeTab === 'code' && (
