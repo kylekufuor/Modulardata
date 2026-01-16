@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, FileSpreadsheet, LogOut, Loader2, Pencil, Check, X, MoreVertical, Trash2 } from 'lucide-react'
+import { Plus, FileSpreadsheet, LogOut, Loader2, Pencil, Check, X, MoreVertical, Trash2, Play } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { api } from '../lib/api'
 import type { Session } from '../types'
+import RunModuleModal from '../components/RunModuleModal'
 
 export default function DashboardPage() {
   const [modules, setModules] = useState<Session[]>([])
@@ -15,6 +16,7 @@ export default function DashboardPage() {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [runModalModule, setRunModalModule] = useState<Session | null>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -94,6 +96,12 @@ export default function DashboardPage() {
     } finally {
       setDeleting(false)
     }
+  }
+
+  const handleRunClick = (e: React.MouseEvent, module: Session) => {
+    e.stopPropagation()
+    setMenuOpenId(null)
+    setRunModalModule(module)
   }
 
   const cancelEditing = (e: React.MouseEvent) => {
@@ -288,6 +296,13 @@ export default function DashboardPage() {
                       {menuOpenId === module.session_id && (
                         <div className="absolute right-0 top-8 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
                           <button
+                            onClick={(e) => handleRunClick(e, module)}
+                            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                          >
+                            <Play className="w-4 h-4" />
+                            Run
+                          </button>
+                          <button
                             onClick={(e) => startEditing(e, module)}
                             className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                           >
@@ -336,6 +351,16 @@ export default function DashboardPage() {
           </div>
         )}
       </main>
+
+      {/* Run Module Modal */}
+      {runModalModule && (
+        <RunModuleModal
+          sessionId={runModalModule.session_id}
+          moduleName={runModalModule.original_filename || 'Untitled Module'}
+          isOpen={true}
+          onClose={() => setRunModalModule(null)}
+        />
+      )}
     </div>
   )
 }

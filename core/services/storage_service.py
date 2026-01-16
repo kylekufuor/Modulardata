@@ -33,6 +33,7 @@ class StorageService:
         df: pd.DataFrame,
         filename: str = "data.csv",
         node_id: str | None = None,
+        path_override: str | None = None,
     ) -> str:
         """
         Upload a DataFrame as CSV to Supabase Storage.
@@ -42,6 +43,7 @@ class StorageService:
             df: DataFrame to upload
             filename: Filename to use
             node_id: Optional node ID for path
+            path_override: Optional full path (overrides other path logic)
 
         Returns:
             Storage path where file was uploaded
@@ -52,7 +54,9 @@ class StorageService:
         client = SupabaseClient.get_client()
 
         # Build storage path: sessions/{session_id}/{node_id or filename}
-        if node_id:
+        if path_override:
+            path = path_override
+        elif node_id:
             path = f"sessions/{session_id}/{node_id}.csv"
         else:
             path = f"sessions/{session_id}/{filename}"

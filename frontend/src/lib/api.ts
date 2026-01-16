@@ -145,4 +145,92 @@ export const api = {
     document.body.removeChild(a)
     window.URL.revokeObjectURL(url)
   },
+
+  // Module Runs
+  runModule: async (sessionId: string, file: File, force: boolean = false) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) throw new Error('Not authenticated')
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const url = `${API_URL}/api/v1/sessions/${sessionId}/run${force ? '?force=true' : ''}`
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Run failed' }))
+      throw new Error(error.detail || 'Run failed')
+    }
+
+    return response.json()
+  },
+
+  listRuns: (sessionId: string, limit: number = 50, offset: number = 0) =>
+    fetchWithAuth(`/api/v1/sessions/${sessionId}/runs?limit=${limit}&offset=${offset}`),
+
+  getRunDetail: (sessionId: string, runId: string) =>
+    fetchWithAuth(`/api/v1/sessions/${sessionId}/runs/${runId}`),
+
+  downloadRunOutput: async (sessionId: string, runId: string, filename?: string) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) throw new Error('Not authenticated')
+
+    const response = await fetch(
+      `${API_URL}/api/v1/sessions/${sessionId}/runs/${runId}/download`,
+      {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Download failed' }))
+      throw new Error(error.detail || 'Download failed')
+    }
+
+    // Get the blob and trigger download
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename || `run_${runId.slice(0, 8)}_output.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  },
+
+  confirmAndRunModule: async (sessionId: string, runId: string, file: File) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) throw new Error('Not authenticated')
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await fetch(
+      `${API_URL}/api/v1/sessions/${sessionId}/runs/${runId}/confirm`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Confirm failed' }))
+      throw new Error(error.detail || 'Confirm failed')
+    }
+
+    return response.json()
+  },
 }

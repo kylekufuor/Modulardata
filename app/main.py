@@ -24,7 +24,7 @@ from app.exceptions import (
     modulardata_exception_handler,
     validation_exception_handler,
 )
-from app.routers import health, sessions, upload, data, tasks, chat, history
+from app.routers import health, sessions, upload, data, tasks, chat, history, runs
 from app.auth import routes as auth_routes
 from app.websocket import routes as websocket_routes
 
@@ -207,6 +207,10 @@ curl -X POST http://localhost:8000/api/v1/sessions/{id}/plan/apply
             "description": "Version history, undo/redo, and rollback",
         },
         {
+            "name": "Runs",
+            "description": "Run modules on new data with schema matching",
+        },
+        {
             "name": "WebSocket",
             "description": "Real-time session updates",
         },
@@ -313,6 +317,13 @@ app.include_router(
     history.router,
     prefix="/api/v1/sessions",
     tags=["History"]
+)
+
+# Module Run endpoints
+app.include_router(
+    runs.router,
+    prefix="/api/v1/sessions",
+    tags=["Runs"]
 )
 
 # WebSocket endpoints (Real-time updates)
