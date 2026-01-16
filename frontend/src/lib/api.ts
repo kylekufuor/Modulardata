@@ -76,10 +76,10 @@ export const api = {
   },
 
   // Chat
-  sendMessage: (sessionId: string, message: string) =>
+  sendMessage: (sessionId: string, message: string, mode: 'plan' | 'transform' = 'plan') =>
     fetchWithAuth(`/api/v1/sessions/${sessionId}/chat`, {
       method: 'POST',
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, mode }),
     }),
 
   // Plan

@@ -57,13 +57,17 @@ class ChatRequest(BaseModel):
             "fill missing values in age with the average",
         ]
     )
+    mode: str = Field(
+        default="plan",
+        description="Chat mode: 'plan' to queue transformations, 'transform' to execute immediately",
+        examples=["plan", "transform"]
+    )
 
     model_config = {
         "json_schema_extra": {
             "examples": [
-                {"message": "remove rows where email is blank"},
-                {"message": "trim whitespace from the name column"},
-                {"message": "convert prices to integers"},
+                {"message": "remove rows where email is blank", "mode": "plan"},
+                {"message": "trim whitespace from the name column", "mode": "transform"},
             ]
         }
     }

@@ -11,12 +11,15 @@ import {
   type Edge,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Send, Upload, Loader2, Pencil, Check, X } from 'lucide-react'
+import { ArrowLeft, Send, Upload, Loader2, Pencil, Check, X, Zap, ListChecks } from 'lucide-react'
 import { api } from '../lib/api'
 import type { Node, ChatMessage as ChatMessageType, HistoryResponse, UploadResponse, Plan } from '../types'
 import DataNode from '../components/DataNode'
 import NodeDetailPanel from '../components/NodeDetailPanel'
 import ChatMessageBubble from '../components/ChatMessage'
+import ThinkingIndicator from '../components/ThinkingIndicator'
+
+type ChatMode = 'plan' | 'transform'
 
 const nodeTypes = {
   dataNode: DataNode,
@@ -34,6 +37,8 @@ export default function SessionPage() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [dataNodes, setDataNodes] = useState<Node[]>([])
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(null)
+  const [showPlanPreview, setShowPlanPreview] = useState(true)
+  const [chatMode, setChatMode] = useState<ChatMode>('plan')
   const [moduleName, setModuleName] = useState<string>('')
 
   // Loading states
@@ -297,7 +302,7 @@ export default function SessionPage() {
     setMessages((prev) => [...prev, tempUserMsg])
 
     try {
-      const response = await api.sendMessage(sessionId, userMessage)
+      const response = await api.sendMessage(sessionId, userMessage, chatMode)
 
       // Add assistant response
       const assistantMsg: ChatMessageType = {
@@ -308,9 +313,15 @@ export default function SessionPage() {
       }
       setMessages((prev) => [...prev, assistantMsg])
 
-      // Set plan if returned
+      // Set plan if returned (plan mode)
       if (response.plan) {
         setCurrentPlan(response.plan)
+        setShowPlanPreview(true) // Show panel when new step added
+      }
+
+      // In transform mode, reload data if transformation was applied
+      if (chatMode === 'transform' && response.new_node_id) {
+        await loadSessionData()
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message')
@@ -489,23 +500,46 @@ export default function SessionPage() {
                 {messages.map((msg) => (
                   <ChatMessageBubble key={msg.id} message={msg} />
                 ))}
+                {sending && <ThinkingIndicator />}
                 <div ref={chatEndRef} />
               </>
             )}
           </div>
 
           {/* Plan Preview */}
-          {currentPlan && (
-            <div className="border-t border-gray-200 p-4 bg-blue-50">
+          {currentPlan && showPlanPreview && (
+            <div className={`border-t p-4 transition-colors ${
+              currentPlan.step_count >= 3
+                ? 'bg-gradient-to-r from-blue-50 to-emerald-50 border-blue-300'
+                : 'bg-blue-50 border-gray-200'
+            }`}>
               <div className="flex items-center justify-between mb-2">
-                <h3 className="font-medium text-gray-900">
-                  Transformation Plan ({currentPlan.step_count} steps)
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-medium text-gray-900">
+                    Transformation Plan
+                  </h3>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                    currentPlan.step_count >= 3
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {currentPlan.step_count} {currentPlan.step_count === 1 ? 'step' : 'steps'}
+                    {currentPlan.step_count >= 3 && ' ready!'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowPlanPreview(false)}
+                  className="text-gray-400 hover:text-gray-600 p-1"
+                  title="Dismiss"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <div className="space-y-2 mb-3">
+              <div className="space-y-2 mb-3 max-h-32 overflow-y-auto">
                 {currentPlan.steps.map((step) => (
-                  <div key={step.step_number} className="text-sm text-gray-700">
-                    {step.step_number}. {step.explanation}
+                  <div key={step.step_number} className="text-sm text-gray-700 flex items-start gap-2">
+                    <span className="text-gray-400 font-mono text-xs mt-0.5">{step.step_number}.</span>
+                    <span>{step.explanation}</span>
                   </div>
                 ))}
               </div>
@@ -513,22 +547,37 @@ export default function SessionPage() {
                 <button
                   onClick={handleApplyPlan}
                   disabled={applyingPlan}
-                  className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
+                  className={`flex-1 px-3 py-2 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-all ${
+                    currentPlan.step_count >= 3
+                      ? 'bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-200'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
                 >
-                  {applyingPlan ? 'Applying...' : 'Apply Plan'}
+                  {applyingPlan ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Applying...
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-center gap-2">
+                      <Zap className="w-4 h-4" />
+                      Apply {currentPlan.step_count >= 3 ? 'All' : 'Plan'}
+                    </span>
+                  )}
                 </button>
                 <button
                   onClick={handleClearPlan}
                   className="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-medium rounded-lg"
+                  title="Clear all steps"
                 >
-                  Cancel
+                  Clear
                 </button>
               </div>
             </div>
           )}
 
           {/* Chat Input */}
-          <div className="border-t border-gray-200 p-4">
+          <div className="border-t border-gray-200 p-4 space-y-3">
             <form onSubmit={handleSendMessage} className="flex gap-2">
               <input
                 type="text"
@@ -550,6 +599,54 @@ export default function SessionPage() {
                 )}
               </button>
             </form>
+
+            {/* Mode Toggle & Actions */}
+            <div className="flex items-center justify-between">
+              {/* Mode Toggle */}
+              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setChatMode('plan')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                    chatMode === 'plan'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  title="Preview transformations before applying"
+                >
+                  <ListChecks className="w-3.5 h-3.5" />
+                  Plan
+                </button>
+                <button
+                  onClick={() => setChatMode('transform')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                    chatMode === 'transform'
+                      ? 'bg-white text-emerald-600 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  title="Execute transformations immediately"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  Transform
+                </button>
+              </div>
+
+              {/* Upload Button */}
+              {messages.length > 0 && (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                >
+                  {uploading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="w-3.5 h-3.5" />
+                  )}
+                  Upload file
+                </button>
+              )}
+            </div>
+
             <input
               ref={fileInputRef}
               type="file"
@@ -557,20 +654,6 @@ export default function SessionPage() {
               onChange={handleFileUpload}
               className="hidden"
             />
-            {messages.length > 0 && (
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                className="mt-2 w-full px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex items-center justify-center gap-2"
-              >
-                {uploading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Upload className="w-4 h-4" />
-                )}
-                Upload another file
-              </button>
-            )}
           </div>
         </div>
 
