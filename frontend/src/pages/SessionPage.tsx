@@ -417,8 +417,16 @@ export default function SessionPage() {
     if (!sessionId) return
 
     try {
-      await api.clearPlan(sessionId)
-      setCurrentPlan(null)
+      const result = await api.clearPlan(sessionId)
+      // Verify the clear succeeded by checking step_count
+      if (result.step_count === 0) {
+        setCurrentPlan(null)
+        setShowPlanPreview(false)
+      } else {
+        // If steps still exist, update the plan state
+        setCurrentPlan(result)
+        setError('Failed to clear plan - please try again')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to clear plan')
     }
