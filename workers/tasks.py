@@ -631,6 +631,29 @@ def process_plan_apply(
 
         logger.info(f"Plan applied: {len(steps)} transformations, created node {node['id']}")
 
+        # Save completion message to chat
+        row_diff = rows_after - rows_before
+        if row_diff == 0:
+            row_summary = "Row count unchanged."
+        elif row_diff > 0:
+            row_summary = f"Added {row_diff} rows."
+        else:
+            row_summary = f"Removed {abs(row_diff)} rows."
+
+        completion_message = f"Done! Applied {len(steps)} transformation{'s' if len(steps) > 1 else ''}. {row_summary}\n\nWhat else would you like to do with your data?"
+
+        SupabaseClient.insert_chat_message(
+            session_id=session_id,
+            role="assistant",
+            content=completion_message,
+            node_id=node["id"],
+            metadata={
+                "transformations_applied": len(steps),
+                "rows_before": rows_before,
+                "rows_after": rows_after,
+            },
+        )
+
         # Broadcast events to WebSocket clients
         try:
             from app.websocket.broadcast import publish_node_created, publish_task_complete
