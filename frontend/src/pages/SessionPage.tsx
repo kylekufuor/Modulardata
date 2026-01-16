@@ -69,7 +69,7 @@ export default function SessionPage() {
     }
   }, [editingName])
 
-  const loadSessionData = async () => {
+  const loadSessionData = async (preserveMessages = false) => {
     if (!sessionId) return
 
     try {
@@ -79,7 +79,12 @@ export default function SessionPage() {
 
       const history: HistoryResponse = await api.getHistory(sessionId)
       setDataNodes(history.nodes)
-      setMessages(history.messages)
+
+      // Only update messages if not preserving (e.g., after file upload with welcome message)
+      if (!preserveMessages) {
+        setMessages(history.messages)
+      }
+
       buildFlowGraph(history.nodes, history.current_node_id)
 
       // Check for pending plan
@@ -155,8 +160,8 @@ export default function SessionPage() {
       }
       setMessages((prev) => [...prev, uploadMessage])
 
-      // Reload session data to get the new node
-      await loadSessionData()
+      // Reload session data to get the new node, but preserve the welcome message
+      await loadSessionData(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
     } finally {
