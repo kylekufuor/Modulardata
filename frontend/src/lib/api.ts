@@ -99,6 +99,12 @@ export const api = {
   getNodeDetail: (sessionId: string, nodeId: string) =>
     fetchWithAuth(`/api/v1/sessions/${sessionId}/nodes/${nodeId}`),
 
+  renameNode: (sessionId: string, nodeId: string, name: string) =>
+    fetchWithAuth(`/api/v1/sessions/${sessionId}/nodes/${nodeId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+
   // Data
   getPreview: (sessionId: string, rows: number = 10) =>
     fetchWithAuth(`/api/v1/sessions/${sessionId}/preview?rows=${rows}`),

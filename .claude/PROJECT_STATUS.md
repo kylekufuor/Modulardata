@@ -56,6 +56,21 @@ Shortened verbose transformation labels:
 - Off-topic messages get friendly redirect back to data tasks
 - App commands ("clear plan", "show plan") always recognized as on-topic
 
+#### NodeDetailPanel Redesign (Latest)
+1. **Left Info Panel** (Parabola-inspired):
+   - Node type badge (Original Data / Transformation)
+   - Node name with edit capability
+   - Output stats (rows, columns, row change %)
+   - Input reference showing parent node
+   - Code preview snippet (clickable to expand)
+   - Actions: Branch from here, Replace File
+
+2. **Node Rename Capability**:
+   - Hover to reveal pencil icon on transformation nodes
+   - Click to edit inline with Enter to save, Escape to cancel
+   - New API endpoint: `PATCH /api/v1/sessions/{id}/nodes/{node_id}`
+   - Updates `transformation` field in database
+
 ### Commits from Today's Session
 ```
 d0122d8 Add apply feedback and shorten node labels
@@ -119,6 +134,7 @@ frontend/src/
 | `/api/v1/sessions/{id}/upload` | POST | Upload CSV (saves welcome msg) |
 | `/api/v1/sessions/{id}/chat` | POST | Send message (persists to DB) |
 | `/api/v1/sessions/{id}/history` | GET | Get nodes + chat messages |
+| `/api/v1/sessions/{id}/nodes/{node_id}` | PATCH | Rename node (transformation label) |
 | `/api/v1/sessions/{id}/plan/apply` | POST | Execute transformations |
 
 ---
@@ -129,12 +145,15 @@ frontend/src/
 |------|---------|
 | `app/routers/chat.py` | Added `_save_chat_messages()`, persist all messages |
 | `app/routers/upload.py` | Card-style welcome message, save to chat_logs |
+| `app/routers/history.py` | Added PATCH endpoint for node rename |
 | `agents/response_generator.py` | Only suggest apply at 3+ steps |
 | `agents/guardrails.py` | Topic classification (earlier) |
 | `workers/tasks.py` | `create_short_node_label()` for concise node names |
-| `frontend/src/pages/SessionPage.tsx` | Chat persistence, welcome prepend, Keep Adding button, apply feedback |
+| `frontend/src/pages/SessionPage.tsx` | Chat persistence, welcome prepend, Keep Adding button, apply feedback, parentNode lookup |
+| `frontend/src/components/NodeDetailPanel.tsx` | Left info panel, node rename UI with inline editing |
 | `frontend/src/components/ChatMessage.tsx` | Chat bubble formatting |
 | `frontend/src/components/ThinkingIndicator.tsx` | Animated thinking dots |
+| `frontend/src/lib/api.ts` | Added `renameNode()` API call |
 
 ---
 

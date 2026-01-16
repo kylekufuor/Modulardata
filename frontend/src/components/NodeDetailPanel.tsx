@@ -1,13 +1,16 @@
 import { useEffect, useState, useRef } from 'react'
-import { X, Loader2, Table, Code, BarChart3, Upload, Clock } from 'lucide-react'
+import { X, Loader2, Table, Code, BarChart3, Upload, GitBranch, FileSpreadsheet, ArrowRight, ChevronRight, Pencil, Check } from 'lucide-react'
 import { api } from '../lib/api'
 import type { Node, ColumnProfile } from '../types'
 
 interface NodeDetailPanelProps {
   sessionId: string
   node: Node
+  parentNode?: Node | null
   onClose: () => void
   onDataRefresh?: () => void
+  onBranchFromNode?: (nodeId: string) => void
+  onNodeRenamed?: (nodeId: string, newName: string) => void
 }
 
 type Tab = 'preview' | 'code' | 'profile'
@@ -40,7 +43,7 @@ interface NodeProfile {
   issues?: DataIssue[]
 }
 
-export default function NodeDetailPanel({ sessionId, node, onClose, onDataRefresh }: NodeDetailPanelProps) {
+export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, onDataRefresh, onBranchFromNode, onNodeRenamed }: NodeDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('preview')
   const [nodeData, setNodeData] = useState<NodeData | null>(null)
   const [nodeDetail, setNodeDetail] = useState<NodeDetail | null>(null)
@@ -52,7 +55,19 @@ export default function NodeDetailPanel({ sessionId, node, onClose, onDataRefres
   const [replacing, setReplacing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Node rename state
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [editedName, setEditedName] = useState(node.transformation || '')
+  const [savingName, setSavingName] = useState(false)
+  const nameInputRef = useRef<HTMLInputElement>(null)
+
   const isOriginal = !node.parent_id
+
+  // Calculate row change from parent
+  const rowChange = parentNode ? node.row_count - parentNode.row_count : null
+  const rowChangePercent = parentNode && parentNode.row_count > 0
+    ? ((node.row_count - parentNode.row_count) / parentNode.row_count * 100).toFixed(1)
+    : null
 
   useEffect(() => {
     loadNodeData()
@@ -153,6 +168,52 @@ export default function NodeDetailPanel({ sessionId, node, onClose, onDataRefres
     return date.toLocaleDateString()
   }
 
+  // Rename handlers
+  const startEditing = () => {
+    setEditedName(node.transformation || '')
+    setIsEditingName(true)
+    setTimeout(() => nameInputRef.current?.focus(), 0)
+  }
+
+  const cancelEditing = () => {
+    setIsEditingName(false)
+    setEditedName(node.transformation || '')
+  }
+
+  const saveNodeName = async () => {
+    const trimmedName = editedName.trim()
+    if (!trimmedName || trimmedName === node.transformation) {
+      cancelEditing()
+      return
+    }
+
+    setSavingName(true)
+    try {
+      await api.renameNode(sessionId, node.id, trimmedName)
+      setIsEditingName(false)
+      if (onNodeRenamed) {
+        onNodeRenamed(node.id, trimmedName)
+      }
+      if (onDataRefresh) {
+        onDataRefresh()
+      }
+    } catch (err) {
+      console.error('Failed to rename node:', err)
+      setError(err instanceof Error ? err.message : 'Failed to rename')
+    } finally {
+      setSavingName(false)
+    }
+  }
+
+  const handleNameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      saveNodeName()
+    } else if (e.key === 'Escape') {
+      cancelEditing()
+    }
+  }
+
   // Close on escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -161,6 +222,13 @@ export default function NodeDetailPanel({ sessionId, node, onClose, onDataRefres
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
   }, [onClose])
+
+  // Get a short code preview (first few lines)
+  const getCodePreview = (code: string | undefined, maxLines: number = 6): string => {
+    if (!code) return ''
+    const lines = code.split('\n').filter(line => line.trim())
+    return lines.slice(0, maxLines).join('\n') + (lines.length > maxLines ? '\n...' : '')
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -171,108 +239,226 @@ export default function NodeDetailPanel({ sessionId, node, onClose, onDataRefres
       />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-xl shadow-2xl w-[900px] max-w-[90vw] h-[600px] max-h-[85vh] flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center gap-4">
-            {/* Tabs */}
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-              <button
-                onClick={() => setActiveTab('preview')}
-                className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  activeTab === 'preview'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <Table className="w-4 h-4" />
-                Preview
-              </button>
-              {isOriginal && (
+      <div className="relative bg-white rounded-xl shadow-2xl w-[1050px] max-w-[95vw] h-[650px] max-h-[90vh] flex overflow-hidden">
+        {/* Left Info Panel */}
+        <div className="w-[240px] flex-shrink-0 bg-gray-50 border-r border-gray-200 flex flex-col overflow-hidden">
+          {/* Node Type Badge */}
+          <div className="px-4 py-4 border-b border-gray-200">
+            <div className="flex items-center gap-2 mb-2">
+              <div className={`p-1.5 rounded-lg ${isOriginal ? 'bg-blue-100' : 'bg-emerald-100'}`}>
+                {isOriginal ? (
+                  <FileSpreadsheet className={`w-4 h-4 ${isOriginal ? 'text-blue-600' : 'text-emerald-600'}`} />
+                ) : (
+                  <ArrowRight className="w-4 h-4 text-emerald-600" />
+                )}
+              </div>
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                isOriginal ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
+              }`}>
+                {isOriginal ? 'Original Data' : 'Transformation'}
+              </span>
+            </div>
+            {/* Editable node name */}
+            {isEditingName ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  ref={nameInputRef}
+                  type="text"
+                  value={editedName}
+                  onChange={(e) => setEditedName(e.target.value)}
+                  onKeyDown={handleNameKeyDown}
+                  onBlur={saveNodeName}
+                  disabled={savingName}
+                  className="flex-1 px-2 py-1 text-sm font-semibold text-gray-900 bg-white border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  placeholder="Enter name..."
+                />
                 <button
-                  onClick={() => setActiveTab('profile')}
-                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                    activeTab === 'profile'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
+                  onClick={saveNodeName}
+                  disabled={savingName}
+                  className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                 >
-                  <BarChart3 className="w-4 h-4" />
-                  Profile
+                  {savingName ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4" />
+                  )}
                 </button>
-              )}
-              {nodeDetail?.transformation_code && (
-                <button
-                  onClick={() => setActiveTab('code')}
-                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                    activeTab === 'code'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  <Code className="w-4 h-4" />
-                  Code
-                </button>
+              </div>
+            ) : (
+              <div className="group flex items-start gap-1.5">
+                <h3 className="flex-1 font-semibold text-gray-900 text-sm leading-tight">
+                  {node.transformation || 'Source File'}
+                </h3>
+                {!isOriginal && (
+                  <button
+                    onClick={startEditing}
+                    className="p-0.5 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Rename this step"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+            <p className="text-xs text-gray-500 mt-1">
+              {formatTimeAgo(node.created_at)}
+            </p>
+          </div>
+
+          {/* Stats */}
+          <div className="px-4 py-3 border-b border-gray-200">
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Output</h4>
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Rows</span>
+                <span className="font-medium text-gray-900">{node.row_count.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Columns</span>
+                <span className="font-medium text-gray-900">{node.column_count}</span>
+              </div>
+              {rowChange !== null && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Row Change</span>
+                  <span className={`font-medium ${rowChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {rowChange >= 0 ? '+' : ''}{rowChange.toLocaleString()} ({rowChangePercent}%)
+                  </span>
+                </div>
               )}
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {isOriginal && (
-              <>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={replacing}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {replacing ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Upload className="w-4 h-4" />
-                  )}
-                  Replace
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv"
-                  onChange={handleReplaceFile}
-                  className="hidden"
-                />
-              </>
+          {/* Input Reference (if has parent) */}
+          {parentNode && (
+            <div className="px-4 py-3 border-b border-gray-200">
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Input</h4>
+              <div className="p-2 bg-white rounded-lg border border-gray-200">
+                <div className="flex items-center gap-2">
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-gray-700 truncate">
+                      {parentNode.transformation || 'Original Data'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {parentNode.row_count.toLocaleString()} rows
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Code Preview (for transformation nodes) */}
+          {!isOriginal && nodeDetail?.transformation_code && (
+            <div className="px-4 py-3 border-b border-gray-200 flex-shrink-0">
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Code</h4>
+              <div
+                className="bg-gray-900 rounded-lg p-2 overflow-hidden cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
+                onClick={() => setActiveTab('code')}
+                title="Click to view full code"
+              >
+                <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap overflow-hidden max-h-[80px]">
+                  {getCodePreview(nodeDetail.transformation_code)}
+                </pre>
+              </div>
+            </div>
+          )}
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Actions */}
+          <div className="px-4 py-3 border-t border-gray-200">
+            {onBranchFromNode && !isOriginal && (
+              <button
+                onClick={() => onBranchFromNode(node.id)}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+              >
+                <GitBranch className="w-4 h-4" />
+                Branch from here
+              </button>
             )}
-            <button
-              onClick={onClose}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              Close
-              <X className="w-4 h-4" />
-            </button>
+            {isOriginal && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={replacing}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {replacing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4" />
+                )}
+                Replace File
+              </button>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              onChange={handleReplaceFile}
+              className="hidden"
+            />
           </div>
         </div>
 
-        {/* Metadata Bar */}
-        <div className="flex items-center gap-6 px-6 py-3 bg-gray-50 border-b border-gray-200 text-sm text-gray-600">
-          <span>{node.row_count.toLocaleString()} rows</span>
-          <span className="text-gray-300">|</span>
-          <span>{node.column_count} columns</span>
-          <span className="text-gray-300">|</span>
-          <span className="flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5" />
-            {formatTimeAgo(node.created_at)}
-          </span>
-          {node.transformation && (
-            <>
-              <span className="text-gray-300">|</span>
-              <span className="text-gray-900 font-medium truncate max-w-md" title={node.transformation}>
-                {node.transformation}
-              </span>
-            </>
-          )}
-        </div>
+        {/* Right Content Area */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200">
+            <div className="flex items-center gap-4">
+              {/* Tabs */}
+              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setActiveTab('preview')}
+                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    activeTab === 'preview'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Table className="w-4 h-4" />
+                  Preview
+                </button>
+                {isOriginal && (
+                  <button
+                    onClick={() => setActiveTab('profile')}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                      activeTab === 'profile'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                    Profile
+                  </button>
+                )}
+                {nodeDetail?.transformation_code && (
+                  <button
+                    onClick={() => setActiveTab('code')}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                      activeTab === 'code'
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <Code className="w-4 h-4" />
+                    Code
+                  </button>
+                )}
+              </div>
+            </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-hidden">
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-hidden">
           {error && (
             <div className="m-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
               {error}
@@ -470,6 +656,7 @@ export default function NodeDetailPanel({ sessionId, node, onClose, onDataRefres
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>

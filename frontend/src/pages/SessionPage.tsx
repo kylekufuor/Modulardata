@@ -379,6 +379,9 @@ export default function SessionPage() {
   }
 
   const selectedDataNode = dataNodes.find((n) => n.id === selectedNodeId)
+  const selectedParentNode = selectedDataNode?.parent_id
+    ? dataNodes.find((n) => n.id === selectedDataNode.parent_id)
+    : null
 
   if (loading) {
     return (
@@ -682,6 +685,7 @@ export default function SessionPage() {
             <NodeDetailPanel
               sessionId={sessionId}
               node={selectedDataNode}
+              parentNode={selectedParentNode}
               onClose={() => setSelectedNodeId(null)}
               onDataRefresh={loadSessionData}
             />

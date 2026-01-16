@@ -78,6 +78,17 @@ class NodeDetailResponse(BaseModel):
     is_current: bool = Field(False, example=True)
 
 
+class NodeRenameRequest(BaseModel):
+    """Request to rename a node."""
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="New name/label for the node",
+        example="Clean email addresses"
+    )
+
+
 class RollbackRequest(BaseModel):
     """Request to rollback to a specific node."""
     target_node_id: str = Field(
@@ -278,6 +289,65 @@ async def get_node_detail(
         storage_path=node.get("storage_path"),
         preview_rows=node.get("preview_rows"),
         is_current=(node["id"] == current_node_id),
+    )
+
+
+@router.patch("/{session_id}/nodes/{node_id}", response_model=NodeDetailResponse)
+async def rename_node(
+    session_id: Annotated[UUID, Path(description="Session UUID")],
+    node_id: Annotated[UUID, Path(description="Node UUID")],
+    request: NodeRenameRequest,
+    user: AuthUser = Depends(get_current_user),
+):
+    """
+    Rename a node (update its transformation label).
+
+    This allows users to customize the display name of transformation nodes
+    for better organization and clarity.
+
+    User must own the session.
+    """
+    session_id_str = str(session_id)
+    node_id_str = str(node_id)
+
+    # Verify session exists and user owns it
+    try:
+        session = SessionService.get_session(session_id_str, user_id=user.id)
+    except SessionNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id_str}")
+
+    # Verify node exists
+    try:
+        node = NodeService.get_node(node_id_str)
+    except NodeNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Node not found: {node_id_str}")
+
+    # Verify node belongs to session
+    if node.get("session_id") != session_id_str:
+        raise HTTPException(status_code=404, detail="Node not found in this session")
+
+    # Update the node's transformation (display name)
+    updated_node = NodeService.update_node(
+        node_id=node_id_str,
+        transformation=request.name.strip(),
+    )
+
+    logger.info(f"Renamed node {node_id_str} to: {request.name}")
+
+    current_node_id = session.get("current_node_id")
+
+    return NodeDetailResponse(
+        id=updated_node["id"],
+        session_id=updated_node["session_id"],
+        parent_id=updated_node.get("parent_id"),
+        created_at=updated_node["created_at"],
+        transformation=updated_node.get("transformation"),
+        transformation_code=updated_node.get("transformation_code"),
+        row_count=updated_node.get("row_count", 0),
+        column_count=updated_node.get("column_count", 0),
+        storage_path=updated_node.get("storage_path"),
+        preview_rows=updated_node.get("preview_rows"),
+        is_current=(updated_node["id"] == current_node_id),
     )
 
 
