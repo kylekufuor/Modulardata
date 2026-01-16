@@ -108,6 +108,11 @@ export const api = {
       body: JSON.stringify({ name }),
     }),
 
+  deleteNode: (sessionId: string, nodeId: string) =>
+    fetchWithAuth(`/api/v1/sessions/${sessionId}/nodes/${nodeId}`, {
+      method: 'DELETE',
+    }),
+
   // Data
   getPreview: (sessionId: string, rows: number = 10) =>
     fetchWithAuth(`/api/v1/sessions/${sessionId}/preview?rows=${rows}`),

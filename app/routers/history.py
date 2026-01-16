@@ -106,6 +106,15 @@ class RollbackRequest(BaseModel):
     }
 
 
+class DeleteNodeResponse(BaseModel):
+    """Response after deleting a node."""
+    success: bool = Field(..., example=True)
+    session_id: str = Field(..., example="550e8400-e29b-41d4-a716-446655440000")
+    deleted_node_id: str = Field(..., example="a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+    new_current_node_id: str = Field(..., example="parent-node-id")
+    message: str = Field(..., example="Deleted transformation 'Remove rows'.")
+
+
 class RollbackResponse(BaseModel):
     """Response from rollback operation."""
     success: bool = Field(..., example=True)
@@ -348,6 +357,79 @@ async def rename_node(
         storage_path=updated_node.get("storage_path"),
         preview_rows=updated_node.get("preview_rows"),
         is_current=(updated_node["id"] == current_node_id),
+    )
+
+
+# =============================================================================
+# Delete Endpoint
+# =============================================================================
+
+@router.delete("/{session_id}/nodes/{node_id}", response_model=DeleteNodeResponse)
+async def delete_node(
+    session_id: Annotated[UUID, Path(description="Session UUID")],
+    node_id: Annotated[UUID, Path(description="Node UUID")],
+    user: AuthUser = Depends(get_current_user),
+):
+    """
+    Delete a transformation node (undo and remove from history).
+
+    This permanently deletes the node and its data. Only the current (latest)
+    node can be deleted, and it must be a transformation (not the original data).
+
+    After deletion:
+    - The parent node becomes the new current node
+    - If the deleted node was deployed, the module reverts to draft status
+
+    User must own the session.
+    """
+    session_id_str = str(session_id)
+    node_id_str = str(node_id)
+
+    # Verify session exists and user owns it
+    try:
+        session = SessionService.get_session(session_id_str, user_id=user.id)
+    except SessionNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Session not found: {session_id_str}")
+
+    # Verify this is the current node
+    current_node_id = session.get("current_node_id")
+    if current_node_id != node_id_str:
+        raise HTTPException(
+            status_code=400,
+            detail="Only the current (latest) node can be deleted"
+        )
+
+    # Attempt to delete the node
+    try:
+        result = NodeService.delete_node(node_id_str, session_id_str)
+    except NodeNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Node not found: {node_id_str}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    parent_id = result["parent_id"]
+    transformation = result.get("transformation", "transformation")
+
+    # Update session's current node to parent
+    SessionService.update_session(
+        session_id=session_id_str,
+        current_node_id=parent_id,
+    )
+
+    # If the deleted node was the deployed node, clear deployment
+    deployed_node_id = session.get("deployed_node_id")
+    if deployed_node_id == node_id_str:
+        SessionService.revert_to_draft(session_id_str)
+        logger.info(f"Reverted session {session_id_str} to draft after deleting deployed node")
+
+    logger.info(f"Deleted node {node_id_str} from session {session_id_str}")
+
+    return DeleteNodeResponse(
+        success=True,
+        session_id=session_id_str,
+        deleted_node_id=node_id_str,
+        new_current_node_id=parent_id,
+        message=f"Deleted '{transformation}'.",
     )
 
 

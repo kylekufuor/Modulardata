@@ -369,3 +369,68 @@ class NodeService:
         except Exception as e:
             logger.error(f"Failed to count nodes: {e}")
             return 0
+
+    @staticmethod
+    def delete_node(node_id: str | UUID, session_id: str | UUID) -> dict[str, Any]:
+        """
+        Delete a node and its associated storage.
+
+        This is a destructive operation that removes the node permanently.
+        Only the current (latest) node can be deleted, and it must have a parent.
+
+        Args:
+            node_id: Node UUID to delete
+            session_id: Session UUID (for verification)
+
+        Returns:
+            Dict with parent_id that should become the new current node
+
+        Raises:
+            NodeNotFoundError: If node doesn't exist
+            ValueError: If node cannot be deleted (has children, is root, etc.)
+        """
+        from core.services.storage_service import StorageService
+
+        client = SupabaseClient.get_client()
+        node_id_str = str(node_id) if isinstance(node_id, UUID) else node_id
+        session_id_str = str(session_id) if isinstance(session_id, UUID) else session_id
+
+        # Get the node
+        node = NodeService.get_node(node_id_str)
+
+        # Verify node belongs to session
+        if node.get("session_id") != session_id_str:
+            raise ValueError("Node does not belong to this session")
+
+        # Verify node has a parent (can't delete original data)
+        parent_id = node.get("parent_id")
+        if not parent_id:
+            raise ValueError("Cannot delete the original data node")
+
+        # Verify node has no children (must be a leaf node)
+        children = NodeService.get_children(node_id_str)
+        if children:
+            raise ValueError("Cannot delete node with children. Delete descendants first.")
+
+        # Delete the CSV file from storage
+        storage_path = node.get("storage_path")
+        if storage_path:
+            try:
+                StorageService.delete_file(storage_path)
+                logger.info(f"Deleted storage file: {storage_path}")
+            except Exception as e:
+                logger.warning(f"Failed to delete storage file {storage_path}: {e}")
+
+        # Delete the node from database
+        try:
+            client.table("nodes").delete().eq("id", node_id_str).execute()
+            logger.info(f"Deleted node: {node_id_str}")
+        except Exception as e:
+            logger.error(f"Failed to delete node: {e}")
+            raise
+
+        return {
+            "deleted_node_id": node_id_str,
+            "parent_id": parent_id,
+            "transformation": node.get("transformation"),
+        }

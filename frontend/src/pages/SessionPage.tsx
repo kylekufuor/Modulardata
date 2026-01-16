@@ -11,7 +11,7 @@ import {
   type Edge,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Send, Upload, Loader2, Pencil, Check, X, Zap, ListChecks, Rocket } from 'lucide-react'
+import { ArrowLeft, Send, Upload, Loader2, Pencil, Check, X, Zap, ListChecks, Rocket, Trash2 } from 'lucide-react'
 import { api } from '../lib/api'
 import type { Node, ChatMessage as ChatMessageType, HistoryResponse, UploadResponse, Plan } from '../types'
 import DataNode from '../components/DataNode'
@@ -56,6 +56,17 @@ export default function SessionPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const contextMenuRef = useRef<HTMLDivElement>(null)
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    x: number
+    y: number
+    nodeId: string
+    canDelete: boolean
+  } | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   // Load session data
   useEffect(() => {
@@ -76,6 +87,17 @@ export default function SessionPage() {
       nameInputRef.current.select()
     }
   }, [editingName])
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as globalThis.Node)) {
+        setContextMenu(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const loadSessionData = async (preserveMessages = false) => {
     if (!sessionId) return
@@ -177,7 +199,50 @@ export default function SessionPage() {
 
   const handleNodeClick = useCallback((_: unknown, node: FlowNode) => {
     setSelectedNodeId(node.id)
+    setContextMenu(null) // Close context menu on click
   }, [])
+
+  const handleNodeContextMenu = useCallback((event: React.MouseEvent, node: FlowNode) => {
+    event.preventDefault()
+    const targetNode = dataNodes.find(n => n.id === node.id)
+    if (!targetNode) return
+
+    // Can only delete current node that has a parent (not original)
+    const canDelete = targetNode.is_current && targetNode.parent_id !== null
+
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      nodeId: node.id,
+      canDelete,
+    })
+  }, [dataNodes])
+
+  const handleDeleteNode = async () => {
+    if (!sessionId || !deleteConfirm) return
+
+    setDeleting(true)
+    try {
+      const result = await api.deleteNode(sessionId, deleteConfirm)
+
+      // Add message to chat
+      const deleteMsg: ChatMessageType = {
+        id: `delete-${Date.now()}`,
+        role: 'assistant',
+        content: `🗑️ ${result.message} Reverted to previous version.`,
+        created_at: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, deleteMsg])
+
+      setDeleteConfirm(null)
+      setContextMenu(null)
+      await loadSessionData(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete node')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -753,6 +818,7 @@ export default function SessionPage() {
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onNodeClick={handleNodeClick}
+                onNodeContextMenu={handleNodeContextMenu}
                 nodeTypes={nodeTypes}
                 fitView
                 fitViewOptions={{ padding: 0.3 }}
@@ -776,6 +842,79 @@ export default function SessionPage() {
           )}
         </div>
       </div>
+
+      {/* Node Context Menu */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="fixed bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          <button
+            onClick={() => {
+              if (contextMenu.canDelete) {
+                setDeleteConfirm(contextMenu.nodeId)
+                setContextMenu(null)
+              }
+            }}
+            disabled={!contextMenu.canDelete}
+            className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${
+              contextMenu.canDelete
+                ? 'text-red-600 hover:bg-red-50'
+                : 'text-gray-400 cursor-not-allowed'
+            }`}
+            title={
+              !contextMenu.canDelete
+                ? 'Only the current (latest) transformation can be deleted'
+                : 'Delete this transformation'
+            }
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete
+          </button>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-sm mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Delete Transformation?
+            </h3>
+            <p className="text-gray-600 mb-4">
+              This will permanently delete this transformation and revert to the previous version.
+              This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteNode}
+                disabled={deleting}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50 flex items-center gap-2"
+              >
+                {deleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Delete
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
