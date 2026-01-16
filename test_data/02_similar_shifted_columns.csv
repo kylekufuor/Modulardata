@@ -1,0 +1,6 @@
+email,first_name,last_name,phone_number,lead_id,campaign_source,company,status,lead_score,created_date
+alex.t@prospect.com,  Alex ,Turner,(555) 333-4444,2001,Google Ads,Prospect Inc,NEW,78,02/01/2024
+maria.garcia@globaltech.io,MARIA,Garcia,555.444.5555,2002,LinkedIn,GlobalTech,qualified,82,2024-02-02
+c.martinez@innovate.net,chris,MARTINEZ,5556667777,2003,facebook ads,Innovate Labs,  contacted  ,69,Feb 3 2024
+jessica.lee@venture.co,Jessica,  Lee  ,+1 555 777 8888,2004,Trade Show,,CONVERTED,91,2024/02/04
+d.clark@solutions.com,DANIEL,clark,(555)888-9999,2005,email campaign,Solutions Pro,new,fifty-four,02-05-2024

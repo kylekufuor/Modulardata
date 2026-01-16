@@ -1,0 +1,9 @@
+sku,product_name,category,unit_price,quantity_in_stock,warehouse_location,supplier_id,reorder_point,last_restocked,weight_kg
+SKU-001,Wireless Mouse,Electronics,29.99,150,Warehouse A,SUP-101,50,2024-01-10,0.15
+SKU-002,USB-C Cable 2m,Accessories,12.99,500,Warehouse B,SUP-102,100,2024-01-11,0.05
+SKU-003,Laptop Stand Adjustable,Office,49.99,75,Warehouse A,SUP-103,25,2024-01-12,1.2
+SKU-004,Webcam HD 1080p,Electronics,79.99,120,Warehouse C,SUP-101,40,2024-01-13,0.25
+SKU-005,Desk Organizer Wood,Office,24.99,200,Warehouse B,SUP-104,60,2024-01-14,0.8
+SKU-006,Bluetooth Headset Pro,Electronics,89.99,90,Warehouse A,SUP-105,30,2024-01-15,0.3
+SKU-007,Monitor Arm Dual,Office,129.99,45,Warehouse C,SUP-103,15,2024-01-16,2.5
+SKU-008,Power Strip 6-Outlet,Accessories,19.99,300,Warehouse B,SUP-106,80,2024-01-17,0.4

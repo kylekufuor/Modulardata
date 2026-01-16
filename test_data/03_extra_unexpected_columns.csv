@@ -1,0 +1,6 @@
+lead_id,first_name,last_name,email,phone_number,company,campaign_source,lead_score,created_date,status,linkedin_url,job_title,industry,employee_count
+3001,  Kevin ,White,KEVIN.WHITE@ALPHA.COM,(555) 111-2222,Alpha Industries,google ads,73,03/01/2024,NEW,linkedin.com/in/kwhite,Marketing Director,Technology,500
+3002,rachel,harris,rachel.h@beta.io,555.222.3333,Beta Solutions,LinkedIn,86,2024-03-02,Qualified,linkedin.com/in/rharris,VP Sales,Finance,1200
+3003,BRIAN,THOMPSON,b.thompson@gamma.net,5553334444,Gamma Tech,email campaign,61,Mar 3 2024,contacted,,CTO,Healthcare,250
+3004,Nicole,  Robinson  ,nicole.r@delta.co,555-444-5555,,Referral,88,2024/03/04,qualified,linkedin.com/in/nrobinson,CEO,Retail,50
+3005,steven,walker,S.WALKER@EPSILON.COM,+1 555 555 6666,Epsilon Corp,Trade Show,95,03-05-2024,CONVERTED,linkedin.com/in/swalker,Founder,Consulting,25

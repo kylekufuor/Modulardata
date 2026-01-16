@@ -1,0 +1,8 @@
+Marketing Campaign Export - Q1 2024,,,,,,,,,
+Generated: 2024-03-15 09:30:00 UTC,,,,,,,,,
+lead_id,first_name,last_name,email,phone_number,company,campaign_source,lead_score,created_date,status
+4001,  Patrick ,King,PATRICK.K@OMEGA.COM,(555) 666-7777,Omega Corp,google ads,77,04/01/2024,NEW
+4002,sandra,hill,sandra.h@sigma.io,555.777.8888,Sigma Industries,LinkedIn,83,2024-04-02,Qualified
+4003,MARK,SCOTT,m.scott@tau.net,5558889999,Tau Tech,email campaign,58,Apr 3 2024,  pending
+4004,Laura,  Green  ,laura.g@phi.co,555-999-0000,,Facebook Ads,92,2024/04/04,converted
+4005,george,adams,G.ADAMS@CHI.COM,+1 555 000 1111,Chi Solutions,referral,71,04-05-2024,contacted
