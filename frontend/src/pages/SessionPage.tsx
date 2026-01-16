@@ -13,13 +13,14 @@ import {
 import '@xyflow/react/dist/style.css'
 import { ArrowLeft, Send, Upload, Loader2, Pencil, Check, X, Zap, ListChecks, Rocket, Trash2 } from 'lucide-react'
 import { api } from '../lib/api'
-import type { Node, ChatMessage as ChatMessageType, HistoryResponse, UploadResponse, Plan } from '../types'
+import type { Node, ChatMessage as ChatMessageType, HistoryResponse, UploadResponse, Plan, ApplyPlanResponse } from '../types'
 import DataNode from '../components/DataNode'
 import NodeDetailPanel from '../components/NodeDetailPanel'
 import ChatMessageBubble from '../components/ChatMessage'
 import ThinkingIndicator from '../components/ThinkingIndicator'
 import QuickActions from '../components/QuickActions'
 import TransformationSuggestions from '../components/TransformationSuggestions'
+import RiskConfirmationModal from '../components/RiskConfirmationModal'
 
 type ChatMode = 'plan' | 'transform'
 
@@ -83,6 +84,14 @@ export default function SessionPage() {
   } | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Risk confirmation state
+  const [riskConfirmation, setRiskConfirmation] = useState<{
+    riskLevel: 'moderate' | 'high'
+    riskReasons: string[]
+    riskPreview?: ApplyPlanResponse['risk_preview']
+  } | null>(null)
+  const [confirming, setConfirming] = useState(false)
 
   // Load session data
   useEffect(() => {
@@ -425,13 +434,24 @@ export default function SessionPage() {
     }
   }
 
-  const handleApplyPlan = async () => {
+  const handleApplyPlan = async (confirmed: boolean = false) => {
     if (!sessionId || !currentPlan) return
 
     setApplyingPlan(true)
     const stepCount = currentPlan.step_count
     try {
-      const result = await api.applyPlan(sessionId)
+      const result: ApplyPlanResponse = await api.applyPlan(sessionId, confirmed)
+
+      // Check if confirmation is required for risky operation
+      if (result.requires_confirmation && !confirmed) {
+        setRiskConfirmation({
+          riskLevel: (result.risk_level as 'moderate' | 'high') || 'moderate',
+          riskReasons: result.risk_reasons || [],
+          riskPreview: result.risk_preview,
+        })
+        setApplyingPlan(false)
+        return
+      }
 
       // Check if the transformation succeeded
       if (!result.success) {
@@ -457,12 +477,23 @@ export default function SessionPage() {
 
       setCurrentPlan(null)
       setShowPlanPreview(false)
+      setRiskConfirmation(null)
       await loadSessionData(true) // preserve messages
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to apply plan')
     } finally {
       setApplyingPlan(false)
+      setConfirming(false)
     }
+  }
+
+  const handleConfirmRiskyPlan = async () => {
+    setConfirming(true)
+    await handleApplyPlan(true)
+  }
+
+  const handleCancelRiskyPlan = () => {
+    setRiskConfirmation(null)
   }
 
   const handleClearPlan = async () => {
@@ -744,7 +775,7 @@ export default function SessionPage() {
               <div className="flex flex-col gap-2">
                 <div className="flex gap-2">
                   <button
-                    onClick={handleApplyPlan}
+                    onClick={() => handleApplyPlan(false)}
                     disabled={applyingPlan}
                     className={`flex-1 px-3 py-2 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-all ${
                       currentPlan.step_count >= 3
@@ -975,6 +1006,17 @@ export default function SessionPage() {
           </div>
         </div>
       )}
+
+      {/* Risk Confirmation Modal */}
+      <RiskConfirmationModal
+        isOpen={riskConfirmation !== null}
+        onClose={handleCancelRiskyPlan}
+        onConfirm={handleConfirmRiskyPlan}
+        riskLevel={riskConfirmation?.riskLevel || 'moderate'}
+        riskReasons={riskConfirmation?.riskReasons || []}
+        riskPreview={riskConfirmation?.riskPreview}
+        isConfirming={confirming}
+      />
     </div>
   )
 }

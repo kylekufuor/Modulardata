@@ -25,6 +25,7 @@ from core.models.plan import (
     ApplyPlanRequest,
     ApplyPlanResponse,
     PlanStatus,
+    RiskPreview,
     SessionPlanResponse,
 )
 from agents.response_generator import (
@@ -565,13 +566,18 @@ async def apply_plan(
     - "one_by_one": Each step creates its own node
     - "steps": Apply specific step numbers only
 
+    Risky Operations:
+    - If the plan involves risky operations (removing >20% rows, dropping columns),
+      the response will include `requires_confirmation: true` with preview info.
+    - To proceed, call again with `confirmed: true` in the request.
+
     Returns a task ID for tracking progress.
     User must own the session.
     """
     session_id_str = str(session_id)
 
     try:
-        SessionService.get_session(session_id_str, user_id=user.id)
+        session = SessionService.get_session(session_id_str, user_id=user.id)
     except SessionNotFoundError:
         raise HTTPException(status_code=404, detail=f"Session not found: {session_id_str}")
 
@@ -585,6 +591,7 @@ async def apply_plan(
 
     # Determine which steps to apply
     mode = request.mode if request else "all"
+    confirmed = request.confirmed if request else False
     steps_to_apply = plan.steps
 
     if mode == "steps" and request and request.step_numbers:
@@ -594,6 +601,17 @@ async def apply_plan(
                 success=False,
                 message=f"No valid steps found for numbers: {request.step_numbers}",
             )
+
+    # ==========================================================================
+    # RISK ASSESSMENT: Check if this operation needs confirmation
+    # ==========================================================================
+    if not confirmed:
+        try:
+            risk_response = _assess_plan_risk(session_id_str, steps_to_apply, session)
+            if risk_response:
+                return risk_response
+        except Exception as e:
+            logger.warning(f"Risk assessment failed, proceeding anyway: {e}")
 
     # Submit to Celery worker and wait for completion
     try:
@@ -643,6 +661,128 @@ async def apply_plan(
             error=str(e),
             message="Failed to apply plan. Please try again.",
         )
+
+
+def _assess_plan_risk(session_id: str, steps, session) -> ApplyPlanResponse | None:
+    """
+    Assess risk for the planned transformations.
+
+    Returns an ApplyPlanResponse with requires_confirmation=True if risky,
+    or None if safe to proceed.
+    """
+    import pandas as pd
+    from lib.supabase_client import SupabaseClient
+    from agents.risk_assessment import assess_transformation_risk
+    from agents.models.technical_plan import TechnicalPlan, ColumnTarget, FilterCondition
+
+    # Get current node data
+    current_node = SupabaseClient.fetch_current_node(session_id)
+    if not current_node or not current_node.get("data_json"):
+        return None
+
+    # Load DataFrame
+    df = pd.DataFrame(current_node["data_json"])
+
+    # Check if module is deployed (higher risk)
+    is_deployed = session.get("is_deployed", False) if isinstance(session, dict) else getattr(session, "is_deployed", False)
+
+    # Aggregate risks across all steps
+    all_reasons = []
+    combined_preview = {
+        "rows_before": len(df),
+        "cols_before": len(df.columns),
+    }
+
+    for step in steps:
+        # Convert step to TechnicalPlan
+        target_columns = []
+        if step.target_columns:
+            for col in step.target_columns:
+                if isinstance(col, str):
+                    target_columns.append(ColumnTarget(column_name=col))
+                elif isinstance(col, dict):
+                    target_columns.append(ColumnTarget(**col))
+                else:
+                    target_columns.append(col)
+
+        # Build conditions if present in parameters
+        conditions = []
+        if step.parameters.get("conditions"):
+            for cond in step.parameters["conditions"]:
+                if isinstance(cond, dict):
+                    conditions.append(FilterCondition(**cond))
+                else:
+                    conditions.append(cond)
+
+        plan = TechnicalPlan(
+            transformation_type=step.transformation_type,
+            target_columns=target_columns,
+            conditions=conditions,
+            parameters=step.parameters or {},
+            explanation=step.explanation,
+        )
+
+        # Assess risk
+        risk = assess_transformation_risk(df, plan, is_deployed=is_deployed)
+
+        if risk.is_risky:
+            all_reasons.extend(risk.reasons)
+
+            # Update combined preview
+            if "rows_after" in risk.preview:
+                combined_preview["rows_after"] = risk.preview["rows_after"]
+                combined_preview["rows_removed"] = risk.preview.get("rows_removed")
+                combined_preview["removal_percent"] = risk.preview.get("removal_percent")
+
+            if "columns_removed" in risk.preview:
+                existing = combined_preview.get("columns_removed", [])
+                combined_preview["columns_removed"] = existing + risk.preview["columns_removed"]
+
+            if "sample_removed" in risk.preview:
+                combined_preview["sample_removed"] = risk.preview["sample_removed"]
+
+    # If no risks found, proceed
+    if not all_reasons:
+        return None
+
+    # Build risk preview
+    risk_preview = RiskPreview(
+        rows_before=combined_preview["rows_before"],
+        cols_before=combined_preview["cols_before"],
+        rows_after=combined_preview.get("rows_after"),
+        rows_removed=combined_preview.get("rows_removed"),
+        removal_percent=combined_preview.get("removal_percent"),
+        columns_removed=combined_preview.get("columns_removed"),
+        sample_removed=combined_preview.get("sample_removed"),
+    )
+
+    # Determine risk level
+    risk_level = "high" if is_deployed or len(all_reasons) > 1 else "moderate"
+
+    # Build confirmation message
+    if risk_level == "high":
+        header = "⚠️ **This is a significant change.**"
+    else:
+        header = "This operation will modify your data."
+
+    message_parts = [header, ""]
+    for reason in all_reasons:
+        message_parts.append(f"• {reason}")
+    message_parts.append("")
+    message_parts.append("Do you want to proceed?")
+
+    confirmation_message = "\n".join(message_parts)
+
+    return ApplyPlanResponse(
+        success=False,
+        message="Confirmation required for this operation.",
+        requires_confirmation=True,
+        is_risky=True,
+        risk_level=risk_level,
+        risk_reasons=all_reasons,
+        risk_preview=risk_preview,
+        confirmation_message=confirmation_message,
+    )
 
 
 @router.post("/{session_id}/plan/clear", response_model=SessionPlanResponse)

@@ -251,6 +251,23 @@ class ApplyPlanRequest(BaseModel):
         description="Specific steps to apply (only if mode='steps')"
     )
 
+    confirmed: bool = Field(
+        default=False,
+        description="Set to true to confirm risky operations"
+    )
+
+
+class RiskPreview(BaseModel):
+    """Preview of what a risky transformation will change."""
+
+    rows_before: int
+    cols_before: int
+    rows_after: int | None = None
+    rows_removed: int | None = None
+    removal_percent: float | None = None
+    columns_removed: list[str] | None = None
+    sample_removed: list[dict] | None = None
+
 
 class ApplyPlanResponse(BaseModel):
     """Response after applying a plan."""
@@ -262,3 +279,11 @@ class ApplyPlanResponse(BaseModel):
     rows_after: int | None = None
     message: str = ""
     error: str | None = None
+
+    # Risk assessment fields
+    requires_confirmation: bool = False
+    is_risky: bool = False
+    risk_level: str | None = None  # "none", "moderate", "high"
+    risk_reasons: list[str] | None = None
+    risk_preview: RiskPreview | None = None
+    confirmation_message: str | None = None

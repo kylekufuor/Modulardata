@@ -102,3 +102,31 @@ export interface ColumnProfile {
   null_percent: number
   unique_count: number
 }
+
+// Risk assessment types
+export interface RiskPreview {
+  rows_before: number
+  cols_before: number
+  rows_after?: number
+  rows_removed?: number
+  removal_percent?: number
+  columns_removed?: string[]
+  sample_removed?: Record<string, unknown>[]
+}
+
+export interface ApplyPlanResponse {
+  success: boolean
+  node_id?: string
+  transformations_applied?: number
+  rows_before?: number
+  rows_after?: number
+  message: string
+  error?: string
+  // Risk assessment fields
+  requires_confirmation?: boolean
+  is_risky?: boolean
+  risk_level?: 'none' | 'moderate' | 'high'
+  risk_reasons?: string[]
+  risk_preview?: RiskPreview
+  confirmation_message?: string
+}

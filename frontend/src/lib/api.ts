@@ -88,8 +88,11 @@ export const api = {
   // Plan
   getPlan: (sessionId: string) => fetchWithAuth(`/api/v1/sessions/${sessionId}/plan`),
 
-  applyPlan: (sessionId: string) =>
-    fetchWithAuth(`/api/v1/sessions/${sessionId}/plan/apply`, { method: 'POST' }),
+  applyPlan: (sessionId: string, confirmed: boolean = false) =>
+    fetchWithAuth(`/api/v1/sessions/${sessionId}/plan/apply`, {
+      method: 'POST',
+      body: JSON.stringify({ confirmed }),
+    }),
 
   clearPlan: (sessionId: string) =>
     fetchWithAuth(`/api/v1/sessions/${sessionId}/plan/clear`, { method: 'POST' }),
