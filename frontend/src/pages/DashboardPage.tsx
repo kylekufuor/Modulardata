@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, FileSpreadsheet, LogOut, Loader2 } from 'lucide-react'
+import { Plus, FileSpreadsheet, LogOut, Loader2, Pencil, Check, X, MoreVertical, Trash2 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { api } from '../lib/api'
 import type { Session } from '../types'
@@ -9,6 +9,14 @@ export default function DashboardPage() {
   const [modules, setModules] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const editInputRef = useRef<HTMLInputElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
@@ -28,8 +36,101 @@ export default function DashboardPage() {
     }
   }
 
+  // Focus input when editing starts
+  useEffect(() => {
+    if (editingId && editInputRef.current) {
+      editInputRef.current.focus()
+      editInputRef.current.select()
+    }
+  }, [editingId])
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpenId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   const handleNewModule = () => {
     navigate('/new-module')
+  }
+
+  const toggleMenu = (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation()
+    setMenuOpenId(menuOpenId === sessionId ? null : sessionId)
+  }
+
+  const startEditing = (e: React.MouseEvent, module: Session) => {
+    e.stopPropagation()
+    setMenuOpenId(null)
+    setEditingId(module.session_id)
+    setEditName(module.original_filename || 'Untitled Module')
+  }
+
+  const handleDeleteClick = (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation()
+    setMenuOpenId(null)
+    setDeleteConfirmId(sessionId)
+  }
+
+  const cancelDelete = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setDeleteConfirmId(null)
+  }
+
+  const confirmDelete = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation()
+    setDeleting(true)
+    try {
+      await api.deleteSession(sessionId)
+      setModules(modules.filter(m => m.session_id !== sessionId))
+      setDeleteConfirmId(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete module')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const cancelEditing = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditingId(null)
+    setEditName('')
+  }
+
+  const saveModuleName = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation()
+    if (!editName.trim()) return
+
+    setSaving(true)
+    try {
+      await api.renameModule(sessionId, editName.trim())
+      setModules(modules.map(m =>
+        m.session_id === sessionId
+          ? { ...m, original_filename: editName.trim() }
+          : m
+      ))
+      setEditingId(null)
+      setEditName('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to rename module')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleEditKeyDown = (e: React.KeyboardEvent, sessionId: string) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      saveModuleName(e as unknown as React.MouseEvent, sessionId)
+    } else if (e.key === 'Escape') {
+      setEditingId(null)
+      setEditName('')
+    }
   }
 
   const handleSignOut = async () => {
@@ -111,7 +212,7 @@ export default function DashboardPage() {
               <div
                 key={module.session_id}
                 onClick={() => navigate(`/session/${module.session_id}`)}
-                className="bg-white rounded-xl border border-gray-200 p-4 hover:border-blue-300 hover:shadow-sm cursor-pointer transition-all"
+                className="group bg-white rounded-xl border border-gray-200 p-4 hover:border-blue-300 hover:shadow-sm cursor-pointer transition-all"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -120,9 +221,41 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="font-medium text-gray-900">
-                          {module.original_filename || 'Untitled Module'}
-                        </h3>
+                        {editingId === module.session_id ? (
+                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              ref={editInputRef}
+                              type="text"
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              onKeyDown={(e) => handleEditKeyDown(e, module.session_id)}
+                              className="px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              disabled={saving}
+                            />
+                            <button
+                              onClick={(e) => saveModuleName(e, module.session_id)}
+                              disabled={saving || !editName.trim()}
+                              className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
+                            >
+                              {saving ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Check className="w-4 h-4" />
+                              )}
+                            </button>
+                            <button
+                              onClick={cancelEditing}
+                              disabled={saving}
+                              className="p-1 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-50"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <h3 className="font-medium text-gray-900">
+                            {module.original_filename || 'Untitled Module'}
+                          </h3>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-xs text-blue-600 font-medium">CSV Transformation</span>
@@ -141,8 +274,63 @@ export default function DashboardPage() {
                     }`}>
                       {module.status}
                     </span>
+
+                    {/* 3-dot menu */}
+                    <div className="relative" ref={menuOpenId === module.session_id ? menuRef : null}>
+                      <button
+                        onClick={(e) => toggleMenu(e, module.session_id)}
+                        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+
+                      {/* Dropdown menu */}
+                      {menuOpenId === module.session_id && (
+                        <div className="absolute right-0 top-8 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                          <button
+                            onClick={(e) => startEditing(e, module)}
+                            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                          >
+                            <Pencil className="w-4 h-4" />
+                            Rename
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteClick(e, module.session_id)}
+                            className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
+
+                {/* Delete confirmation */}
+                {deleteConfirmId === module.session_id && (
+                  <div className="mt-3 pt-3 border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
+                    <p className="text-sm text-gray-600 mb-3">
+                      Are you sure you want to delete this module? This action cannot be undone.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => confirmDelete(e, module.session_id)}
+                        disabled={deleting}
+                        className="px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50"
+                      >
+                        {deleting ? 'Deleting...' : 'Delete'}
+                      </button>
+                      <button
+                        onClick={cancelDelete}
+                        disabled={deleting}
+                        className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

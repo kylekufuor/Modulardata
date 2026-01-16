@@ -53,6 +53,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.1.0] - 2026-01-15
+
+### Added
+- **Web UI**: React-based frontend with module management
+  - Dashboard showing all modules with status
+  - Module type selection page (CSV Transformation active, others coming soon)
+  - Real-time chat interface with AI assistant
+  - Interactive node graph visualization
+  - Data preview and transformation code viewer
+- **Module Renaming**: PATCH endpoint to rename sessions/modules
+- **File Replace**: Replace source data from node detail panel
+
+### Changed
+- **UI Terminology**: Sessions are now displayed as "Modules" in the web interface for user-friendliness
+- **Welcome Message**: Data profiler summary now appears after file upload with column details and detected issues
+
+---
+
 ## [Unreleased]
 
 ### Planned
@@ -60,7 +78,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Rate limiting
 - Webhook notifications
 - Python SDK
-- Web UI
+- Excel transformation module
 - Multi-file joins
 - Data export to databases
 - Scheduled transformations
@@ -71,6 +89,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 1.1.0 | 2026-01-15 | Web UI, module renaming, file replacement |
 | 1.0.0 | 2026-01-15 | Initial release with 53 transformations |
 
 ---

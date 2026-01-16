@@ -12,10 +12,12 @@ ModularData is an AI-powered data transformation API that lets you clean, transf
 
 ### Key Concepts
 
-- **Session**: A workspace containing your data and transformation history
+- **Session** (API) / **Module** (UI): A workspace containing your data and transformation history. The API uses "session" while the web interface displays these as "modules".
 - **Node**: A version of your data (each transformation creates a new node)
 - **Plan**: A queue of transformations to apply (plan mode)
 - **Task**: An async job for executing transformations
+
+> **Note:** The API uses "sessions" for endpoints and responses. The web UI displays sessions as "Modules" for user-friendliness. They refer to the same concept.
 
 ---
 
@@ -117,6 +119,25 @@ Get session details.
     "current_node_id": "...",
     "row_count": 15,
     "column_count": 6
+}
+```
+
+#### PATCH /api/v1/sessions/{session_id}
+Update session details (rename module).
+
+**Request Body:**
+```json
+{
+    "name": "My Renamed Module"
+}
+```
+
+**Response:**
+```json
+{
+    "session_id": "...",
+    "name": "My Renamed Module",
+    "message": "Module updated successfully"
 }
 ```
 

@@ -11,7 +11,7 @@ import {
   type Edge,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Send, Upload, Loader2 } from 'lucide-react'
+import { ArrowLeft, Send, Upload, Loader2, Pencil, Check, X } from 'lucide-react'
 import { api } from '../lib/api'
 import type { Node, ChatMessage, HistoryResponse, UploadResponse, Plan } from '../types'
 import DataNode from '../components/DataNode'
@@ -33,9 +33,14 @@ export default function SessionPage() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [dataNodes, setDataNodes] = useState<Node[]>([])
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(null)
+  const [moduleName, setModuleName] = useState<string>('')
 
   // Loading states
   const [loading, setLoading] = useState(true)
+  const [editingName, setEditingName] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [savingName, setSavingName] = useState(false)
+  const nameInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [sending, setSending] = useState(false)
   const [applyingPlan, setApplyingPlan] = useState(false)
@@ -56,10 +61,22 @@ export default function SessionPage() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Focus name input when editing starts
+  useEffect(() => {
+    if (editingName && nameInputRef.current) {
+      nameInputRef.current.focus()
+      nameInputRef.current.select()
+    }
+  }, [editingName])
+
   const loadSessionData = async () => {
     if (!sessionId) return
 
     try {
+      // Fetch session details for module name
+      const sessionDetails = await api.getSession(sessionId)
+      setModuleName(sessionDetails.original_filename || 'Untitled Module')
+
       const history: HistoryResponse = await api.getHistory(sessionId)
       setDataNodes(history.nodes)
       setMessages(history.messages)
@@ -258,6 +275,41 @@ export default function SessionPage() {
     }
   }
 
+  const startEditingName = () => {
+    setEditName(moduleName)
+    setEditingName(true)
+  }
+
+  const cancelEditingName = () => {
+    setEditingName(false)
+    setEditName('')
+  }
+
+  const saveModuleName = async () => {
+    if (!sessionId || !editName.trim()) return
+
+    setSavingName(true)
+    try {
+      await api.renameModule(sessionId, editName.trim())
+      setModuleName(editName.trim())
+      setEditingName(false)
+      setEditName('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to rename module')
+    } finally {
+      setSavingName(false)
+    }
+  }
+
+  const handleNameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      saveModuleName()
+    } else if (e.key === 'Escape') {
+      cancelEditingName()
+    }
+  }
+
   const selectedDataNode = dataNodes.find((n) => n.id === selectedNodeId)
 
   if (loading) {
@@ -278,7 +330,51 @@ export default function SessionPage() {
         >
           <ArrowLeft className="w-5 h-5 text-gray-600" />
         </button>
-        <h1 className="font-semibold text-gray-900">CSV Transformation</h1>
+        <div className="flex items-center gap-2">
+          {editingName ? (
+            <div className="flex items-center gap-2">
+              <input
+                ref={nameInputRef}
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onKeyDown={handleNameKeyDown}
+                className="px-2 py-1 text-sm font-semibold border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={savingName}
+              />
+              <button
+                onClick={saveModuleName}
+                disabled={savingName || !editName.trim()}
+                className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
+              >
+                {savingName ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4" />
+                )}
+              </button>
+              <button
+                onClick={cancelEditingName}
+                disabled={savingName}
+                className="p-1 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <>
+              <h1 className="font-semibold text-gray-900">{moduleName}</h1>
+              <button
+                onClick={startEditingName}
+                className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                title="Rename module"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </>
+          )}
+        </div>
+        <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded">CSV Transformation</span>
       </header>
 
       {error && (
@@ -454,6 +550,7 @@ export default function SessionPage() {
               sessionId={sessionId}
               node={selectedDataNode}
               onClose={() => setSelectedNodeId(null)}
+              onDataRefresh={loadSessionData}
             />
           )}
         </div>

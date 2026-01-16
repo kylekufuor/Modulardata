@@ -134,8 +134,10 @@ curl https://web-production-2d224.up.railway.app/api/v1/sessions/{session_id}/da
 
 ## Key Concepts
 
-### Sessions
+### Sessions (API) / Modules (UI)
 A session is your workspace. It holds your data and remembers all transformations. Sessions persist until you delete them.
+
+> **Terminology:** The API uses "sessions" in endpoints (e.g., `/api/v1/sessions`), but the web interface displays these as "Modules" for user-friendliness. You can rename modules from the dashboard or within a session.
 
 ### Nodes (Version Control)
 Every transformation creates a new "node" (version). You can:

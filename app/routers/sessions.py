@@ -151,6 +151,47 @@ async def list_sessions(
     }
 
 
+class SessionUpdateRequest(BaseModel):
+    """Request to update session details."""
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+        description="New name for the module (stored as original_filename)"
+    )
+
+
+@router.patch("/{session_id}")
+async def update_session(
+    session_id: Annotated[UUID, Path(description="Session UUID")],
+    request: SessionUpdateRequest,
+    user: AuthUser = Depends(get_current_user),
+):
+    """
+    Update session/module details.
+
+    Currently supports renaming the module.
+    User must own the session.
+    """
+    session_id_str = str(session_id)
+
+    # Verify ownership
+    session = SessionService.get_session(session_id_str, user_id=user.id)
+
+    # Update name if provided (stored in original_filename field)
+    if request.name is not None:
+        session = SessionService.update_session(
+            session_id=session_id_str,
+            original_filename=request.name,
+        )
+
+    return {
+        "session_id": session["id"],
+        "name": session.get("original_filename"),
+        "message": "Module updated successfully",
+    }
+
+
 @router.delete("/{session_id}")
 async def archive_session(
     session_id: Annotated[UUID, Path(description="Session UUID")],

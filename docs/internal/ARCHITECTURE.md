@@ -15,6 +15,8 @@ ModularData is an AI-powered data transformation API built on a modern async Pyt
 ┌─────────────────────────────────────────────────────────────────────┐
 │                           Clients                                    │
 │                    (Postman, SDKs, Web UI)                          │
+│                                                                       │
+│  Note: Web UI displays "sessions" as "Modules" for user-friendliness │
 └─────────────────────────────────────────────────────────────────────┘
                                  │
                                  ▼

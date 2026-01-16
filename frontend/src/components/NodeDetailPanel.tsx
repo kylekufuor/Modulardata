@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { X, Loader2, Table, Code, FileSpreadsheet } from 'lucide-react'
+import { useEffect, useState, useRef } from 'react'
+import { X, Loader2, Table, Code, FileSpreadsheet, Upload } from 'lucide-react'
 import { api } from '../lib/api'
 import type { Node } from '../types'
 
@@ -7,6 +7,7 @@ interface NodeDetailPanelProps {
   sessionId: string
   node: Node
   onClose: () => void
+  onDataRefresh?: () => void
 }
 
 type Tab = 'preview' | 'code'
@@ -17,11 +18,13 @@ interface NodeData {
   column_count: number
 }
 
-export default function NodeDetailPanel({ sessionId, node, onClose }: NodeDetailPanelProps) {
+export default function NodeDetailPanel({ sessionId, node, onClose, onDataRefresh }: NodeDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('preview')
   const [nodeData, setNodeData] = useState<NodeData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [replacing, setReplacing] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     loadNodeData()
@@ -38,6 +41,31 @@ export default function NodeDetailPanel({ sessionId, node, onClose }: NodeDetail
       setError(err instanceof Error ? err.message : 'Failed to load data')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleReplaceFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setReplacing(true)
+    setError('')
+
+    try {
+      await api.uploadFile(sessionId, file)
+      // Refresh the session data
+      if (onDataRefresh) {
+        onDataRefresh()
+      }
+      // Reload node data
+      await loadNodeData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to replace file')
+    } finally {
+      setReplacing(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     }
   }
 
@@ -66,12 +94,37 @@ export default function NodeDetailPanel({ sessionId, node, onClose }: NodeDetail
             </p>
           </div>
         </div>
-        <button
-          onClick={onClose}
-          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
-        >
-          <X className="w-4 h-4 text-gray-500" />
-        </button>
+        <div className="flex items-center gap-2">
+          {isOriginal && (
+            <>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={replacing}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {replacing ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Upload className="w-3.5 h-3.5" />
+                )}
+                Replace File
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleReplaceFile}
+                className="hidden"
+              />
+            </>
+          )}
+          <button
+            onClick={onClose}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}

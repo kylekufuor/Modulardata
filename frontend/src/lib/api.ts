@@ -45,6 +45,12 @@ export const api = {
 
   deleteSession: (sessionId: string) => fetchWithAuth(`/api/v1/sessions/${sessionId}`, { method: 'DELETE' }),
 
+  renameModule: (sessionId: string, name: string) =>
+    fetchWithAuth(`/api/v1/sessions/${sessionId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+
   // Upload
   uploadFile: async (sessionId: string, file: File) => {
     const { data: { session } } = await supabase.auth.getSession()
