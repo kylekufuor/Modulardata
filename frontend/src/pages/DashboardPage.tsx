@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, FileSpreadsheet, LogOut, Loader2, Pencil, Check, X, MoreVertical, Trash2, Play } from 'lucide-react'
+import { Plus, FileSpreadsheet, LogOut, Loader2, Pencil, Check, X, MoreVertical, Trash2, Play, Rocket } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { api } from '../lib/api'
 import type { Session } from '../types'
@@ -17,6 +17,7 @@ export default function DashboardPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [runModalModule, setRunModalModule] = useState<Session | null>(null)
+  const [deploying, setDeploying] = useState<string | null>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -102,6 +103,29 @@ export default function DashboardPage() {
     e.stopPropagation()
     setMenuOpenId(null)
     setRunModalModule(module)
+  }
+
+  const handleDeployClick = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation()
+    setMenuOpenId(null)
+    setDeploying(sessionId)
+    try {
+      const result = await api.deployModule(sessionId)
+      setModules(modules.map(m =>
+        m.session_id === sessionId
+          ? {
+              ...m,
+              status: 'deployed' as const,
+              deployed_node_id: result.deployed_node_id,
+              deployed_at: result.deployed_at,
+            }
+          : m
+      ))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to deploy module')
+    } finally {
+      setDeploying(null)
+    }
   }
 
   const cancelEditing = (e: React.MouseEvent) => {
@@ -275,13 +299,26 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      module.status === 'active'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {module.status}
-                    </span>
+                    {deploying === module.session_id ? (
+                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Deploying...
+                      </span>
+                    ) : (
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        module.status === 'deployed'
+                          ? 'bg-green-100 text-green-700'
+                          : module.deployed_node_id
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {module.status === 'deployed'
+                          ? 'Deployed'
+                          : module.deployed_node_id
+                          ? 'Modified'
+                          : 'Draft'}
+                      </span>
+                    )}
 
                     {/* 3-dot menu */}
                     <div className="relative" ref={menuOpenId === module.session_id ? menuRef : null}>
@@ -295,13 +332,24 @@ export default function DashboardPage() {
                       {/* Dropdown menu */}
                       {menuOpenId === module.session_id && (
                         <div className="absolute right-0 top-8 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
-                          <button
-                            onClick={(e) => handleRunClick(e, module)}
-                            className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                          >
-                            <Play className="w-4 h-4" />
-                            Run
-                          </button>
+                          {module.deployed_node_id && (
+                            <button
+                              onClick={(e) => handleRunClick(e, module)}
+                              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                            >
+                              <Play className="w-4 h-4" />
+                              Run
+                            </button>
+                          )}
+                          {module.status !== 'deployed' && (
+                            <button
+                              onClick={(e) => handleDeployClick(e, module.session_id)}
+                              className="w-full px-3 py-2 text-left text-sm text-green-700 hover:bg-green-50 flex items-center gap-2"
+                            >
+                              <Rocket className="w-4 h-4" />
+                              {module.deployed_node_id ? 'Redeploy' : 'Deploy'}
+                            </button>
+                          )}
                           <button
                             onClick={(e) => startEditing(e, module)}
                             className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"

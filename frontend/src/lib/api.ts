@@ -51,6 +51,9 @@ export const api = {
       body: JSON.stringify({ name }),
     }),
 
+  deployModule: (sessionId: string) =>
+    fetchWithAuth(`/api/v1/sessions/${sessionId}/deploy`, { method: 'POST' }),
+
   // Upload
   uploadFile: async (sessionId: string, file: File) => {
     const { data: { session } } = await supabase.auth.getSession()

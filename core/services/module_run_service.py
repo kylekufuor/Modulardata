@@ -192,25 +192,34 @@ class ModuleRunService:
             return []
 
     @staticmethod
-    def get_transformation_chain(session_id: str) -> list[dict[str, Any]]:
+    def get_transformation_chain(session_id: str, use_deployed: bool = True) -> list[dict[str, Any]]:
         """
         Get the full transformation chain for a module.
 
-        Returns nodes from root (original) to current, in order.
+        Args:
+            session_id: Module session ID
+            use_deployed: If True, use deployed_node_id; if False, use current_node_id
+
+        Returns nodes from root (original) to target node, in order.
         """
         from core.services.session_service import SessionService
 
-        # Get session to find current node
+        # Get session to find target node
         session = SessionService.get_session(session_id)
-        current_node_id = session.get("current_node_id")
 
-        if not current_node_id:
+        # Use deployed_node_id for runs, current_node_id otherwise
+        if use_deployed:
+            target_node_id = session.get("deployed_node_id")
+        else:
+            target_node_id = session.get("current_node_id")
+
+        if not target_node_id:
             return []
 
-        # Get lineage from current back to root
-        lineage = NodeService.get_node_lineage(current_node_id, depth=100)
+        # Get lineage from target back to root
+        lineage = NodeService.get_node_lineage(target_node_id, depth=100)
 
-        # Lineage is returned root -> current, which is what we want
+        # Lineage is returned root -> target, which is what we want
         return lineage
 
     @staticmethod

@@ -45,7 +45,7 @@ class SessionService:
 
         # Use placeholder filename if none provided (database requires non-null)
         data = {
-            "status": SessionStatus.ACTIVE.value,
+            "status": SessionStatus.DRAFT.value,
             "original_filename": original_filename or "pending_upload.csv",
             "user_id": str(user_id),
         }
@@ -241,6 +241,9 @@ class SessionService:
 
         if status:
             query = query.eq("status", status.value)
+        else:
+            # By default, exclude archived sessions
+            query = query.neq("status", SessionStatus.ARCHIVED.value)
 
         # Add pagination
         offset = (page - 1) * page_size
@@ -256,3 +259,113 @@ class SessionService:
         except Exception as e:
             logger.error(f"Failed to list sessions: {e}")
             raise
+
+    @staticmethod
+    def deploy_session(
+        session_id: str | UUID,
+        user_id: UUID | str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Deploy a module, making it ready to run on new data.
+
+        Args:
+            session_id: The session UUID
+            user_id: If provided, verify the session belongs to this user
+
+        Returns:
+            Updated session dict
+
+        Raises:
+            SessionNotFoundError: If session doesn't exist or user doesn't own it
+            ValueError: If module has no transformations to deploy
+        """
+        from datetime import datetime, timezone
+
+        # Verify session exists and user owns it
+        session = SessionService.get_session(session_id, user_id=user_id)
+
+        # Check if archived
+        if session.get("status") == SessionStatus.ARCHIVED.value:
+            raise SessionArchivedError(str(session_id))
+
+        # Check if module has data
+        if not session.get("current_node_id"):
+            raise ValueError("Module has no data. Upload data before deploying.")
+
+        client = SupabaseClient.get_client()
+        session_id_str = str(session_id) if isinstance(session_id, UUID) else session_id
+
+        # Get current node to set as deployed version
+        current_node_id = session.get("current_node_id")
+
+        try:
+            response = (
+                client.table("sessions")
+                .update({
+                    "status": SessionStatus.DEPLOYED.value,
+                    "deployed_at": datetime.now(timezone.utc).isoformat(),
+                    "deployed_node_id": current_node_id,
+                })
+                .eq("id", session_id_str)
+                .execute()
+            )
+
+            if response.data:
+                logger.info(f"Deployed session: {session_id_str}, deployed_node_id: {current_node_id}")
+                return response.data[0]
+
+            return session
+
+        except Exception as e:
+            logger.error(f"Failed to deploy session: {e}")
+            raise
+
+    @staticmethod
+    def revert_to_draft(
+        session_id: str | UUID,
+        user_id: UUID | str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Revert a deployed module back to draft status.
+
+        Called automatically when a deployed module is edited.
+
+        Args:
+            session_id: The session UUID
+            user_id: If provided, verify the session belongs to this user
+
+        Returns:
+            Updated session dict
+        """
+        session = SessionService.get_session(session_id, user_id=user_id)
+
+        # Only revert if currently deployed
+        if session.get("status") != SessionStatus.DEPLOYED.value:
+            return session
+
+        client = SupabaseClient.get_client()
+        session_id_str = str(session_id) if isinstance(session_id, UUID) else session_id
+
+        try:
+            response = (
+                client.table("sessions")
+                .update({"status": SessionStatus.DRAFT.value})
+                .eq("id", session_id_str)
+                .execute()
+            )
+
+            if response.data:
+                logger.info(f"Reverted session to draft: {session_id_str}")
+                return response.data[0]
+
+            return session
+
+        except Exception as e:
+            logger.error(f"Failed to revert session to draft: {e}")
+            raise
+
+    @staticmethod
+    def is_deployed(session_id: str | UUID) -> bool:
+        """Check if a session is deployed."""
+        session = SessionService.get_session(session_id)
+        return session.get("status") == SessionStatus.DEPLOYED.value

@@ -269,6 +269,9 @@ def process_chat_message(
             current_node_id=node["id"],
         )
 
+        # Revert to draft if module was deployed (editing a deployed module)
+        SessionService.revert_to_draft(session_id)
+
         # Save chat messages
         SupabaseClient.insert_chat_message(
             session_id=session_id,
@@ -610,6 +613,9 @@ def process_plan_apply(
             session_id=session_id,
             current_node_id=node["id"],
         )
+
+        # Revert to draft if module was deployed (editing a deployed module)
+        SessionService.revert_to_draft(session_id)
 
         # Mark plan as applied
         PlanService.mark_applied(plan_id, node["id"])

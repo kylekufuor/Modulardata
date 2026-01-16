@@ -136,11 +136,12 @@ async def run_module(
     # Verify session exists and user owns it
     session = SessionService.get_session(session_id_str, user_id=str(user.id))
 
-    # Check session has data and is deployed-ready
-    if not session.get("current_node_id"):
+    # Check session has been deployed (has a deployed_node_id)
+    deployed_node_id = session.get("deployed_node_id")
+    if not deployed_node_id:
         raise HTTPException(
             status_code=400,
-            detail="Module has no data. Upload and transform data first."
+            detail="Module has not been deployed. Deploy the module before running it on new data."
         )
 
     # Read uploaded file

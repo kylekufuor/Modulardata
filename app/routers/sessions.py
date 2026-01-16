@@ -142,6 +142,8 @@ async def list_sessions(
                 "created_at": s["created_at"],
                 "original_filename": s.get("original_filename"),
                 "current_node_id": s.get("current_node_id"),
+                "deployed_node_id": s.get("deployed_node_id"),
+                "deployed_at": s.get("deployed_at"),
             }
             for s in sessions
         ],
@@ -211,3 +213,33 @@ async def archive_session(
         "status": session["status"],
         "message": "Session archived successfully",
     }
+
+
+@router.post("/{session_id}/deploy")
+async def deploy_session(
+    session_id: Annotated[UUID, Path(description="Session UUID")],
+    user: AuthUser = Depends(get_current_user),
+):
+    """
+    Deploy a module, making it ready to run on new data.
+
+    Once deployed:
+    - The module can be run on new data via POST /sessions/{id}/run
+    - The current transformation chain becomes the "contract"
+    - Editing the module will revert it to draft status
+
+    User must own the session.
+    """
+    try:
+        session = SessionService.deploy_session(str(session_id), user_id=user.id)
+
+        return {
+            "session_id": session["id"],
+            "status": session["status"],
+            "deployed_node_id": session.get("deployed_node_id"),
+            "deployed_at": session.get("deployed_at"),
+            "message": "Module deployed successfully",
+        }
+    except ValueError as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=str(e))

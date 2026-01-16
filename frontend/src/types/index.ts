@@ -9,10 +9,12 @@ export interface User {
 // Session types
 export interface Session {
   session_id: string
-  status: string
+  status: 'draft' | 'deployed' | 'archived'
   created_at: string
   original_filename?: string
   current_node_id?: string
+  deployed_node_id?: string
+  deployed_at?: string
 }
 
 // Node types

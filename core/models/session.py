@@ -21,14 +21,16 @@ from .profile import ProfileSummary
 
 class SessionStatus(str, Enum):
     """
-    Possible states for a session.
+    Possible states for a session/module.
 
-    - active: Session is in use, user can make changes
-    - archived: Session is closed/deleted (soft delete)
+    - draft: Module is being trained/edited, cannot be run on new data
+    - deployed: Module is ready to run on new data
+    - archived: Module is soft-deleted
 
-    We use soft delete so session history is preserved for auditing.
+    Flow: draft -> deployed -> (edit) -> draft -> deployed
     """
-    ACTIVE = "active"
+    DRAFT = "draft"
+    DEPLOYED = "deployed"
     ARCHIVED = "archived"
 
 
