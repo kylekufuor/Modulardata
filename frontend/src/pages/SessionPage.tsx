@@ -11,7 +11,7 @@ import {
   type Edge,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Send, Upload, Loader2, Pencil, Check, X, Zap, ListChecks } from 'lucide-react'
+import { ArrowLeft, Send, Upload, Loader2, Pencil, Check, X, Zap, ListChecks, Rocket } from 'lucide-react'
 import { api } from '../lib/api'
 import type { Node, ChatMessage as ChatMessageType, HistoryResponse, UploadResponse, Plan } from '../types'
 import DataNode from '../components/DataNode'
@@ -40,6 +40,8 @@ export default function SessionPage() {
   const [showPlanPreview, setShowPlanPreview] = useState(true)
   const [chatMode, setChatMode] = useState<ChatMode>('plan')
   const [moduleName, setModuleName] = useState<string>('')
+  const [deployedNodeId, setDeployedNodeId] = useState<string | null>(null)
+  const [deploying, setDeploying] = useState(false)
 
   // Loading states
   const [loading, setLoading] = useState(true)
@@ -79,10 +81,11 @@ export default function SessionPage() {
     if (!sessionId) return
 
     try {
-      // Fetch session details for module name
+      // Fetch session details for module name and deployment status
       const sessionDetails = await api.getSession(sessionId)
       const filename = sessionDetails.original_filename || 'Untitled Module'
       setModuleName(filename)
+      setDeployedNodeId(sessionDetails.deployed_node_id || null)
 
       const history: HistoryResponse = await api.getHistory(sessionId)
       setDataNodes(history.nodes)
@@ -378,6 +381,36 @@ export default function SessionPage() {
     }
   }
 
+  const handleDeploy = async () => {
+    if (!sessionId) return
+
+    setDeploying(true)
+    try {
+      const result = await api.deployModule(sessionId)
+      setDeployedNodeId(result.deployed_node_id)
+
+      // Add success message to chat
+      const successMsg: ChatMessageType = {
+        id: `deploy-${Date.now()}`,
+        role: 'assistant',
+        content: `🚀 Module deployed successfully!\n\nYour transformation pipeline is now ready to run on new data. Go to the Dashboard to run this module on other CSV files.`,
+        created_at: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, successMsg])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to deploy module')
+    } finally {
+      setDeploying(false)
+    }
+  }
+
+  // Check if module can be deployed (needs at least one transformation)
+  const canDeploy = dataNodes.length >= 2
+  const isDeployed = deployedNodeId !== null
+  // Check if current state matches deployed state
+  const currentNodeId = dataNodes.find(n => n.is_current)?.id
+  const isModified = isDeployed && currentNodeId !== deployedNodeId
+
   const selectedDataNode = dataNodes.find((n) => n.id === selectedNodeId)
   const selectedParentNode = selectedDataNode?.parent_id
     ? dataNodes.find((n) => n.id === selectedDataNode.parent_id)
@@ -446,6 +479,44 @@ export default function SessionPage() {
           )}
         </div>
         <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded">CSV Transformation</span>
+
+        {/* Spacer to push deploy button to right */}
+        <div className="flex-1" />
+
+        {/* Deploy Button */}
+        <button
+          onClick={handleDeploy}
+          disabled={!canDeploy || deploying || (isDeployed && !isModified)}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+            !canDeploy
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : isDeployed && !isModified
+              ? 'bg-green-100 text-green-700 cursor-default'
+              : 'bg-green-600 hover:bg-green-700 text-white'
+          }`}
+          title={
+            !canDeploy
+              ? 'Add at least one transformation to deploy'
+              : isDeployed && !isModified
+              ? 'Module is deployed'
+              : isModified
+              ? 'Redeploy to update the deployed version'
+              : 'Deploy this module'
+          }
+        >
+          {deploying ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Rocket className="w-4 h-4" />
+          )}
+          {deploying
+            ? 'Deploying...'
+            : isDeployed && !isModified
+            ? 'Deployed'
+            : isModified
+            ? 'Redeploy'
+            : 'Deploy'}
+        </button>
       </header>
 
       {error && (

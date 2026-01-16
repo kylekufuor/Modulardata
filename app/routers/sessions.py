@@ -108,6 +108,8 @@ async def get_session(
         "created_at": session["created_at"],
         "original_filename": session.get("original_filename"),
         "current_node_id": session.get("current_node_id"),
+        "deployed_node_id": session.get("deployed_node_id"),
+        "deployed_at": session.get("deployed_at"),
         "row_count": session.get("row_count", 0),
         "column_count": session.get("column_count", 0),
         "profile": session.get("profile"),
