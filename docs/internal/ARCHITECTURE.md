@@ -1,7 +1,7 @@
 # ModularData Architecture
 
-> **Last Updated:** 2026-01-15
-> **Version:** 1.0.0
+> **Last Updated:** 2026-01-16
+> **Version:** 1.2.0
 
 This document describes the technical architecture of ModularData.
 
@@ -80,9 +80,11 @@ app/
     ├── sessions.py   # /api/v1/sessions/*
     ├── upload.py     # CSV upload handling
     ├── data.py       # Data access/download
-    ├── chat.py       # AI transformation interface
+    ├── chat.py       # AI transformation interface + risk assessment
     ├── history.py    # Version control/rollback
-    └── tasks.py      # Task status tracking
+    ├── tasks.py      # Task status tracking
+    ├── runs.py       # Module run execution
+    └── feedback.py   # User feedback collection
 ```
 
 **Key design decisions:**
@@ -116,6 +118,7 @@ agents/
 ├── strategist.py     # Context Strategist - interprets user intent
 ├── engineer.py       # Engineer - executes pandas code
 ├── chat_handler.py   # Orchestrates agent communication
+├── risk_assessment.py # Evaluates transformations for safety
 ├── models/
 │   ├── technical_plan.py    # Transformation plan schema
 │   └── execution_result.py  # Result schema
@@ -138,13 +141,23 @@ agents/
 **Agent Pipeline:**
 
 ```
-User Message → Strategist AI → Technical Plan → Engineer → Transformed Data
-                    │                                           │
-                    └── Uses: column names, data types,         │
-                              sample values, prior context      │
-                                                                ▼
-                                                        New Node Created
+User Message → Strategist AI → Technical Plan → Risk Assessment → Engineer → Transformed Data
+                    │                                 │                            │
+                    └── Uses: column names,           │                            │
+                              data types,             ▼                            │
+                              sample values,    [If risky]                        │
+                              prior context     Confirmation                       │
+                                                  Required                         ▼
+                                                                            New Node Created
 ```
+
+**Risk Assessment:**
+
+The `risk_assessment.py` module evaluates transformations before execution:
+- **Row removal threshold**: >20% removal triggers confirmation
+- **Aggressive filter threshold**: <50% rows kept triggers confirmation
+- **Column drops**: Always triggers confirmation
+- **Deployed modules**: Higher scrutiny for production modules
 
 ### 4. Core Services (`core/`)
 

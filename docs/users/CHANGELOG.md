@@ -71,6 +71,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.2.0] - 2026-01-16
+
+### Added
+
+#### Safety & Confirmation
+- **Risk Assessment**: Automatic detection of potentially destructive operations
+  - Warns when removing >20% of rows
+  - Warns when filtering keeps <50% of data
+  - Warns when dropping columns
+  - Higher scrutiny for deployed modules
+- **Confirmation Modal**: Preview impact before applying risky transformations
+  - Shows rows before/after counts
+  - Lists columns being removed
+  - Displays sample of affected rows
+  - Requires explicit confirmation to proceed
+
+#### User Feedback
+- **Thumbs Up/Down Feedback**: Rate AI transformation quality
+  - Appears after completed transformations
+  - Optional comment for negative feedback
+  - Stored for model improvement analytics
+- **Feedback API**: `POST /api/v1/feedback` endpoint
+
+#### Transformation Details
+- **Summary Tab**: New tab in node detail panel showing:
+  - Step-by-step descriptions of what changed
+  - Before/After comparison (rows, columns, nulls)
+  - Column-level change tracking
+- **Clickable INPUT**: Navigate to parent node from Summary tab
+
+### Fixed
+- **Filter Validation**: Filters now require at least one condition
+  - Previously could generate `df = df[True]` which did nothing
+  - Added quality check to warn when filter doesn't actually filter
+- **Strategist Prompt**: Added critical validation rules requiring conditions for filter/drop operations
+
+---
+
 ## [Unreleased]
 
 ### Planned
@@ -89,6 +127,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 1.2.0 | 2026-01-16 | Risk assessment, confirmation modal, feedback system, filter fix |
 | 1.1.0 | 2026-01-15 | Web UI, module renaming, file replacement |
 | 1.0.0 | 2026-01-15 | Initial release with 53 transformations |
 
