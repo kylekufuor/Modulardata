@@ -23,11 +23,21 @@ interface NodeDetail {
   created_at?: string
 }
 
+interface DataIssue {
+  issue_type?: string
+  severity?: string
+  column?: string
+  description: string
+  affected_count?: number
+  affected_percent?: number
+  suggestion?: string
+}
+
 interface NodeProfile {
   row_count: number
   column_count: number
   columns: ColumnProfile[]
-  issues?: string[]
+  issues?: DataIssue[]
 }
 
 export default function NodeDetailPanel({ sessionId, node, onClose, onDataRefresh }: NodeDetailPanelProps) {
@@ -89,7 +99,7 @@ export default function NodeDetailPanel({ sessionId, node, onClose, onDataRefres
         row_count: profile.row_count || response?.row_count || 0,
         column_count: profile.column_count || response?.column_count || 0,
         columns: columns,
-        issues: Array.isArray(profile.issues) ? profile.issues : [],
+        issues: Array.isArray(profile.issues) ? profile.issues as DataIssue[] : [],
       })
       if (columns.length === 0) {
         setProfileError('Profile data has no columns')
@@ -412,8 +422,23 @@ export default function NodeDetailPanel({ sessionId, node, onClose, onDataRefres
                     <h3 className="text-sm font-semibold text-gray-900 mb-3">Detected Issues</h3>
                     <div className="space-y-2">
                       {nodeProfile.issues.map((issue, idx) => (
-                        <div key={idx} className="flex items-start gap-2 p-3 bg-amber-50 rounded-lg">
-                          <span className="text-amber-600 text-sm">{issue}</span>
+                        <div key={idx} className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                          <div className="flex items-start gap-2">
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                              issue.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                              issue.severity === 'warning' ? 'bg-amber-100 text-amber-700' :
+                              'bg-blue-100 text-blue-700'
+                            }`}>
+                              {issue.severity || 'info'}
+                            </span>
+                            {issue.column && (
+                              <span className="text-xs text-gray-500">[{issue.column}]</span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-700 mt-1">{issue.description}</p>
+                          {issue.suggestion && (
+                            <p className="text-xs text-gray-500 mt-1">Suggestion: {issue.suggestion}</p>
+                          )}
                         </div>
                       ))}
                     </div>
