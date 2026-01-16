@@ -72,6 +72,7 @@ CREATE TABLE nodes (
     storage_path TEXT,
     transformation TEXT,
     transformation_code TEXT,
+    step_descriptions JSONB,
     profile_json JSONB,
     row_count INTEGER,
     column_count INTEGER,
@@ -85,8 +86,9 @@ CREATE TABLE nodes (
 | `session_id` | UUID | No | Parent session |
 | `parent_id` | UUID | Yes | Previous version (null for original) |
 | `storage_path` | TEXT | Yes | Path in Supabase Storage |
-| `transformation` | TEXT | Yes | Human-readable description |
+| `transformation` | TEXT | Yes | Human-readable description (short label) |
 | `transformation_code` | TEXT | Yes | Executed pandas code |
+| `step_descriptions` | JSONB | Yes | Array of descriptions for each step |
 | `profile_json` | JSONB | Yes | Data profile (columns, types, stats) |
 | `row_count` | INTEGER | Yes | Number of rows |
 | `column_count` | INTEGER | Yes | Number of columns |

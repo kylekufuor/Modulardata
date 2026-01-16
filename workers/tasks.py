@@ -261,6 +261,7 @@ def process_chat_message(
             transformation=plan.explanation,
             transformation_code=code,
             preview_rows=result_df.head(10).to_dict(orient="records"),
+            step_descriptions=[plan.explanation],
         )
 
         # Update session
@@ -606,6 +607,7 @@ def process_plan_apply(
             transformation_code=combined_code,
             preview_rows=df.head(10).to_dict(orient="records"),
             node_id=new_node_id,
+            step_descriptions=all_explanations,
         )
 
         # Update session

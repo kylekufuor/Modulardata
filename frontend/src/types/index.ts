@@ -24,6 +24,7 @@ export interface Node {
   created_at: string
   transformation: string | null
   transformation_code?: string
+  step_descriptions?: string[]
   row_count: number
   column_count: number
   is_current: boolean

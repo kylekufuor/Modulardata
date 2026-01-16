@@ -57,6 +57,7 @@ class NodeService:
         transformation_code: str | None = None,
         preview_rows: list[dict] | None = None,
         node_id: str | None = None,
+        step_descriptions: list[str] | None = None,
     ) -> dict[str, Any]:
         """
         Create a new node in the version tree.
@@ -72,6 +73,7 @@ class NodeService:
             transformation_code: The pandas code that was executed
             preview_rows: Preview of first N rows
             node_id: Optional pre-generated node ID (for storage path alignment)
+            step_descriptions: List of human-readable descriptions for each transformation step
 
         Returns:
             Created node dict with id, created_at, etc.
@@ -107,6 +109,7 @@ class NodeService:
             "transformation": transformation,
             "transformation_code": transformation_code,
             "preview_rows": clean_preview_rows,
+            "step_descriptions": step_descriptions,
         }
 
         # Add pre-generated node_id if provided

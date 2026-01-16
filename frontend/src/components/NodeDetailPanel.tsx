@@ -316,6 +316,18 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
             <p className="text-xs text-gray-500 mt-1">
               {formatTimeAgo(node.created_at)}
             </p>
+
+            {/* Step Descriptions */}
+            {node.step_descriptions && node.step_descriptions.length > 0 && (
+              <div className="mt-3 space-y-1.5">
+                {node.step_descriptions.map((desc, idx) => (
+                  <div key={idx} className="flex items-start gap-2 text-xs text-gray-600">
+                    <span className="text-gray-400 mt-0.5">•</span>
+                    <span>{desc}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Stats */}

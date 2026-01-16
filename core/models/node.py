@@ -97,6 +97,13 @@ class NodeCreate(BaseModel):
         description="Python/pandas code executed for this transformation"
     )
 
+    # Individual step descriptions for batch transformations
+    # Allows UI to show a summary of what each step did
+    step_descriptions: list[str] | None = Field(
+        default=None,
+        description="List of human-readable descriptions for each transformation step"
+    )
+
     # Preview of first N rows as JSON for quick display
     # Avoids needing to fetch full file from storage for previews
     preview_rows: list[dict] | None = Field(
@@ -185,6 +192,12 @@ class NodeResponse(BaseModel):
     transformation_code: str | None = Field(
         default=None,
         description="Python/pandas code executed for this transformation"
+    )
+
+    # Individual step descriptions for batch transformations
+    step_descriptions: list[str] | None = Field(
+        default=None,
+        description="List of human-readable descriptions for each transformation step"
     )
 
     # Quick preview of data at this version
