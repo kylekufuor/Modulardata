@@ -6,38 +6,30 @@ import { api } from '../lib/api'
 import type { Session } from '../types'
 
 export default function DashboardPage() {
-  const [sessions, setSessions] = useState<Session[]>([])
+  const [modules, setModules] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
-  const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
 
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
 
   useEffect(() => {
-    loadSessions()
+    loadModules()
   }, [])
 
-  const loadSessions = async () => {
+  const loadModules = async () => {
     try {
       const data = await api.listSessions()
-      setSessions(data.sessions)
+      setModules(data.sessions)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load sessions')
+      setError(err instanceof Error ? err.message : 'Failed to load modules')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleCreateSession = async () => {
-    setCreating(true)
-    try {
-      const data = await api.createSession()
-      navigate(`/session/${data.session_id}`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create session')
-      setCreating(false)
-    }
+  const handleNewModule = () => {
+    navigate('/new-module')
   }
 
   const handleSignOut = async () => {
@@ -78,20 +70,14 @@ export default function DashboardPage() {
         {/* Page Title */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Your Sessions</h2>
-            <p className="text-gray-600 mt-1">Create and manage your data transformations</p>
+            <h2 className="text-2xl font-bold text-gray-900">Modules</h2>
           </div>
           <button
-            onClick={handleCreateSession}
-            disabled={creating}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+            onClick={handleNewModule}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
           >
-            {creating ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Plus className="w-5 h-5" />
-            )}
-            New CSV Transformation
+            <Plus className="w-5 h-5" />
+            New Module
           </button>
         </div>
 
@@ -101,31 +87,30 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Sessions List */}
+        {/* Modules List */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
           </div>
-        ) : sessions.length === 0 ? (
+        ) : modules.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
             <FileSpreadsheet className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No sessions yet</h3>
-            <p className="text-gray-600 mb-6">Create your first CSV transformation to get started</p>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No modules yet</h3>
+            <p className="text-gray-600 mb-6">Create your first module to get started</p>
             <button
-              onClick={handleCreateSession}
-              disabled={creating}
+              onClick={handleNewModule}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
             >
               <Plus className="w-5 h-5" />
-              New CSV Transformation
+              New Module
             </button>
           </div>
         ) : (
           <div className="grid gap-4">
-            {sessions.map((session) => (
+            {modules.map((module) => (
               <div
-                key={session.session_id}
-                onClick={() => navigate(`/session/${session.session_id}`)}
+                key={module.session_id}
+                onClick={() => navigate(`/session/${module.session_id}`)}
                 className="bg-white rounded-xl border border-gray-200 p-4 hover:border-blue-300 hover:shadow-sm cursor-pointer transition-all"
               >
                 <div className="flex items-center justify-between">
@@ -134,21 +119,27 @@ export default function DashboardPage() {
                       <FileSpreadsheet className="w-5 h-5 text-blue-600" />
                     </div>
                     <div>
-                      <h3 className="font-medium text-gray-900">
-                        {session.original_filename || 'Untitled Session'}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        Created {formatDate(session.created_at)}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium text-gray-900">
+                          {module.original_filename || 'Untitled Module'}
+                        </h3>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-blue-600 font-medium">CSV Transformation</span>
+                        <span className="text-gray-300">•</span>
+                        <span className="text-sm text-gray-500">
+                          Created {formatDate(module.created_at)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      session.status === 'active'
+                      module.status === 'active'
                         ? 'bg-green-100 text-green-700'
                         : 'bg-gray-100 text-gray-600'
                     }`}>
-                      {session.status}
+                      {module.status}
                     </span>
                   </div>
                 </div>

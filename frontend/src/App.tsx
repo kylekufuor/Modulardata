@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import AuthPage from './pages/AuthPage'
 import DashboardPage from './pages/DashboardPage'
+import NewModulePage from './pages/NewModulePage'
 import SessionPage from './pages/SessionPage'
 import { Loader2 } from 'lucide-react'
 
@@ -45,6 +46,14 @@ function App() {
         element={
           <ProtectedRoute>
             <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/new-module"
+        element={
+          <ProtectedRoute>
+            <NewModulePage />
           </ProtectedRoute>
         }
       />

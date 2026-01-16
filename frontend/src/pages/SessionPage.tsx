@@ -127,11 +127,13 @@ export default function SessionPage() {
     try {
       const response: UploadResponse = await api.uploadFile(sessionId, file)
 
-      // Add system message about upload
+      // Build welcome message with data profiler
+      const welcomeMessage = buildWelcomeMessage(response)
+
       const uploadMessage: ChatMessage = {
         id: `upload-${Date.now()}`,
         role: 'assistant',
-        content: `Uploaded "${response.filename}" with ${response.profile.row_count} rows and ${response.profile.column_count} columns.`,
+        content: welcomeMessage,
         created_at: new Date().toISOString(),
       }
       setMessages((prev) => [...prev, uploadMessage])
@@ -146,6 +148,48 @@ export default function SessionPage() {
         fileInputRef.current.value = ''
       }
     }
+  }
+
+  const buildWelcomeMessage = (response: UploadResponse): string => {
+    const { filename, profile } = response
+    const { row_count, column_count, columns } = profile
+
+    let message = `Welcome to ModularData! 👋\n\n`
+    message += `I'm your data transformation assistant. I help you clean, transform, and prepare your data through natural conversation.\n\n`
+    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+    message += `📊 Your Data: ${filename}\n`
+    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+    message += `Rows: ${row_count.toLocaleString()}  |  Columns: ${column_count}\n\n`
+
+    // List columns with types and missing values
+    message += `📋 Columns:\n`
+    columns.forEach((col) => {
+      const nullInfo = col.null_count > 0
+        ? ` (${col.null_count} missing)`
+        : ''
+      message += `  • ${col.name} [${col.semantic_type}]${nullInfo}\n`
+    })
+
+    // Show issues if any columns have missing values
+    const columnsWithIssues = columns.filter(col => col.null_count > 0)
+      .sort((a, b) => b.null_count - a.null_count)
+
+    if (columnsWithIssues.length > 0) {
+      message += `\n⚠️ Issues Detected:\n`
+      columnsWithIssues.slice(0, 5).forEach((col) => {
+        const pct = row_count > 0 ? ((col.null_count / row_count) * 100).toFixed(1) : '0'
+        message += `  • ${col.null_count.toLocaleString()} missing ${col.name} (${pct}%)\n`
+      })
+      message += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+      message += `What would you like to tackle first?\n`
+      message += `(I noticed ${columnsWithIssues[0].name} has the most missing values)`
+    } else {
+      message += `\n✅ No obvious issues detected - your data looks clean!\n`
+      message += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+      message += `What would you like to do with this data?`
+    }
+
+    return message
   }
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -249,23 +293,18 @@ export default function SessionPage() {
         <div className="w-96 flex flex-col bg-white border-r border-gray-200">
           {/* Chat Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* Welcome Message - Always shown first */}
-            <div className="mr-8">
-              <div className="p-3 rounded-lg bg-gray-100 text-gray-900">
-                <p className="text-sm font-medium mb-2">Welcome to ModularData! 👋</p>
-                <p className="text-sm whitespace-pre-wrap">
-                  I'm your data transformation assistant. I help you clean, transform, and prepare your data through natural conversation.
+            {dataNodes.length === 0 ? (
+              /* Upload prompt - shown before any data is uploaded */
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                  <Upload className="w-8 h-8 text-blue-600" />
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Upload a CSV file to get started
+                </h3>
+                <p className="text-gray-600 mb-6 max-w-xs">
+                  I'll analyze your data and help you clean, transform, and prepare it through conversation.
                 </p>
-                {dataNodes.length === 0 && (
-                  <p className="text-sm mt-2 text-gray-600">
-                    Upload a CSV file to get started, and I'll help you explore and clean your data.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {messages.length === 0 && dataNodes.length === 0 ? (
-              <div className="text-center py-4">
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
@@ -276,7 +315,7 @@ export default function SessionPage() {
                   ) : (
                     <Upload className="w-4 h-4" />
                   )}
-                  Upload CSV
+                  {uploading ? 'Uploading...' : 'Upload CSV'}
                 </button>
               </div>
             ) : (
