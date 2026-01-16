@@ -31,6 +31,7 @@ from agents.response_generator import (
     generate_plan_added_response,
     generate_conversational_response,
 )
+from agents.guardrails import check_message
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +207,21 @@ async def _handle_chat_message(session_id: str, message: str) -> ChatResponse:
 
         # Get profile data for conversational context
         profile_data = current_node.get("profile_json", {})
+
+        # =====================================================================
+        # GUARDRAILS: Check if message is on-topic
+        # =====================================================================
+        is_on_topic, redirect_response = check_message(message, profile_data)
+
+        if not is_on_topic and redirect_response:
+            # Return redirect response for off-topic messages
+            plan = PlanService.get_or_create_plan(session_id)
+            return ChatResponse(
+                session_id=session_id,
+                message=message,
+                plan=SessionPlanResponse.from_plan(plan),
+                assistant_response=redirect_response,
+            )
 
         # Check if this is a general question vs transformation request
         is_question = _is_general_question(message)
