@@ -74,6 +74,43 @@ def check_row_count_change(
 
 
 @register_check(
+    "filter_actually_filtered",
+    applies_to=["filter_rows"]
+)
+def check_filter_actually_filtered(
+    before_df: pd.DataFrame,
+    after_df: pd.DataFrame,
+    plan: TechnicalPlan
+) -> list[QualityIssue]:
+    """
+    Check that filter_rows actually filtered some rows.
+
+    If filter_rows keeps all rows, it likely means:
+    - Conditions weren't applied correctly
+    - Filter criteria matched everything (suspicious)
+    """
+    issues = []
+
+    rows_before = len(before_df)
+    rows_after = len(after_df)
+
+    if rows_before > 0 and rows_before == rows_after:
+        issues.append(QualityIssue(
+            check_name="filter_actually_filtered",
+            severity=Severity.WARNING,
+            message="Filter kept all rows - no rows were filtered out",
+            details={
+                "rows_before": rows_before,
+                "rows_after": rows_after,
+                "conditions": [str(c) for c in (plan.conditions or [])]
+            },
+            suggestion="The filter criteria matched all rows. Verify the filter conditions are correct."
+        ))
+
+    return issues
+
+
+@register_check(
     "row_count_unchanged",
     applies_to=["trim_whitespace", "change_case", "replace_values", "fill_nulls",
                 "rename_column", "convert_type", "round_numbers", "normalize",

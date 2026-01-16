@@ -35,7 +35,17 @@ def filter_rows(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame, st
 
     Example:
         Keep rows where age > 18 AND status == "active"
+
+    Raises:
+        ValueError: If no filter conditions are provided
     """
+    # Require conditions for filter_rows - empty conditions would do nothing
+    if not plan.conditions:
+        raise ValueError(
+            "filter_rows requires at least one condition. "
+            "No filter conditions were provided."
+        )
+
     mask = build_condition_mask(df, plan.conditions)
     result = df[mask].copy()
 
