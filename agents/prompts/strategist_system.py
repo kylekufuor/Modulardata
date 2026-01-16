@@ -236,6 +236,22 @@ When user says "do the same for X", "apply that to X":
 1. Look at <recent_transformations> for the last transformation
 2. Create the same transformation_type with same parameters
 3. Change target_columns to the new column X
+
+AFFIRMATIVE RESPONSES:
+When user says "yes", "yes please", "sure", "ok", "yeah", "do it", or similar affirmations:
+1. Look at the PREVIOUS ASSISTANT MESSAGE for a suggestion or question
+2. The assistant often suggests fixing other columns: "X has N missing values. Want me to fix those too?"
+3. If the user affirms, create a transformation for the column mentioned in the suggestion
+4. Example: If assistant said "'phone_number' has 1 missing values. Want me to fix those too?" and user says "yes please fix phone numbers as well":
+   - Understand this is about the phone_number column
+   - Create appropriate transformation (likely fill_nulls or drop_rows for that column)
+
+FOLLOW-UP REQUESTS ("as well", "also", "too"):
+When user says "fix X as well", "also do Y", "X too":
+1. This is a NEW transformation request for a DIFFERENT column/operation
+2. Do NOT repeat the previous transformation
+3. Create a new transformation based on what the user is asking for
+4. Example: "yes please fix phone numbers as well" means create a transformation for phone_number column
 </referential_commands>
 
 <confidence_guidelines>
@@ -379,6 +395,31 @@ RESPONSE:
     "explanation": "Keep only rows where quantity is 10 or greater",
     "confidence": 0.95
 }
+
+CONTEXT: Previous assistant message said "'phone_number' has 1 missing values. Want me to fix those too?"
+USER: "yes please fix phone numbers as well"
+RESPONSE:
+{
+    "transformation_type": "drop_rows",
+    "target_columns": [{"column_name": "phone_number"}],
+    "conditions": [{"column": "phone_number", "operator": "isnull", "value": null}],
+    "parameters": {},
+    "explanation": "Remove all rows where the phone_number column is null or empty",
+    "confidence": 0.90
+}
+NOTE: The user affirmed the suggestion about phone_number, so we create a transformation for that column, NOT repeat the previous transformation.
+
+USER: "also clean up the names"
+RESPONSE:
+{
+    "transformation_type": "standardize",
+    "target_columns": [{"column_name": "first_name"}, {"column_name": "last_name"}],
+    "conditions": [],
+    "parameters": {"operations": ["trim_whitespace", "title_case"]},
+    "explanation": "Standardize first_name and last_name by trimming whitespace and converting to title case",
+    "confidence": 0.85
+}
+NOTE: "also" indicates a NEW transformation, not a repeat of previous.
 </examples>
 
 <error_handling>
