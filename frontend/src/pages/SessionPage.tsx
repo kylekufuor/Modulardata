@@ -13,9 +13,10 @@ import {
 import '@xyflow/react/dist/style.css'
 import { ArrowLeft, Send, Upload, Loader2, Pencil, Check, X } from 'lucide-react'
 import { api } from '../lib/api'
-import type { Node, ChatMessage, HistoryResponse, UploadResponse, Plan } from '../types'
+import type { Node, ChatMessage as ChatMessageType, HistoryResponse, UploadResponse, Plan } from '../types'
 import DataNode from '../components/DataNode'
 import NodeDetailPanel from '../components/NodeDetailPanel'
+import ChatMessageBubble from '../components/ChatMessage'
 
 const nodeTypes = {
   dataNode: DataNode,
@@ -28,7 +29,7 @@ export default function SessionPage() {
   // State
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messages, setMessages] = useState<ChatMessageType[]>([])
   const [inputMessage, setInputMessage] = useState('')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [dataNodes, setDataNodes] = useState<Node[]>([])
@@ -152,7 +153,7 @@ export default function SessionPage() {
       // Build welcome message with data profiler
       const welcomeMessage = buildWelcomeMessage(response)
 
-      const uploadMessage: ChatMessage = {
+      const uploadMessage: ChatMessageType = {
         id: `upload-${Date.now()}`,
         role: 'assistant',
         content: welcomeMessage,
@@ -223,7 +224,7 @@ export default function SessionPage() {
     setSending(true)
 
     // Add user message immediately
-    const tempUserMsg: ChatMessage = {
+    const tempUserMsg: ChatMessageType = {
       id: `user-${Date.now()}`,
       role: 'user',
       content: userMessage,
@@ -235,7 +236,7 @@ export default function SessionPage() {
       const response = await api.sendMessage(sessionId, userMessage)
 
       // Add assistant response
-      const assistantMsg: ChatMessage = {
+      const assistantMsg: ChatMessageType = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: response.assistant_response,
@@ -422,22 +423,7 @@ export default function SessionPage() {
             ) : (
               <>
                 {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`${
-                      msg.role === 'user' ? 'ml-8' : 'mr-8'
-                    }`}
-                  >
-                    <div
-                      className={`p-3 rounded-lg ${
-                        msg.role === 'user'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-900'
-                      }`}
-                    >
-                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                    </div>
-                  </div>
+                  <ChatMessageBubble key={msg.id} message={msg} />
                 ))}
                 <div ref={chatEndRef} />
               </>
