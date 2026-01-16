@@ -116,6 +116,17 @@ async def upload_file(
     SessionService.get_session(session_id_str, user_id=user.id)
 
     # =============================================================================
+    # 0. Check for existing data and delete if replacing
+    # =============================================================================
+    existing_nodes = NodeService.get_node_history(session_id_str)
+    if existing_nodes:
+        logger.info(f"Replacing existing data: deleting {len(existing_nodes)} nodes")
+        NodeService.delete_all_nodes(session_id_str)
+        # Also clear chat history since it's related to old data
+        from lib.supabase_client import SupabaseClient
+        SupabaseClient.delete_chat_messages(session_id_str)
+
+    # =============================================================================
     # 1. Validate File
     # =============================================================================
 

@@ -371,6 +371,49 @@ class NodeService:
             return 0
 
     @staticmethod
+    def delete_all_nodes(session_id: str | UUID) -> int:
+        """
+        Delete all nodes for a session.
+
+        Used when replacing data (uploading a new file to an existing session).
+        This is a destructive operation.
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            Number of nodes deleted
+        """
+        from core.services.storage_service import StorageService
+
+        client = SupabaseClient.get_client()
+        session_id_str = str(session_id) if isinstance(session_id, UUID) else session_id
+
+        # Get all nodes for the session
+        nodes = NodeService.get_node_history(session_id_str)
+
+        if not nodes:
+            return 0
+
+        # Delete storage files for each node
+        for node in nodes:
+            storage_path = node.get("storage_path")
+            if storage_path:
+                try:
+                    StorageService.delete_file(storage_path)
+                except Exception as e:
+                    logger.warning(f"Failed to delete storage file {storage_path}: {e}")
+
+        # Delete all nodes in one query
+        try:
+            client.table("nodes").delete().eq("session_id", session_id_str).execute()
+            logger.info(f"Deleted {len(nodes)} nodes for session {session_id_str}")
+            return len(nodes)
+        except Exception as e:
+            logger.error(f"Failed to delete nodes: {e}")
+            raise
+
+    @staticmethod
     def delete_node(node_id: str | UUID, session_id: str | UUID) -> dict[str, Any]:
         """
         Delete a node and its associated storage.

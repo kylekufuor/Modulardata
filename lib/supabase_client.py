@@ -495,3 +495,38 @@ class SupabaseClient:
                 code="INSERT_MESSAGE_FAILED",
                 details={"session_id": str(session_id), "role": role}
             )
+
+    @classmethod
+    def delete_chat_messages(
+        cls,
+        session_id: str | UUID,
+    ) -> int:
+        """
+        Delete all chat messages for a session.
+
+        Used when replacing data (uploading a new file to an existing session).
+
+        Args:
+            session_id: Session UUID
+
+        Returns:
+            Number of messages deleted (approximate)
+        """
+        client = cls.get_client()
+        session_id_str = cls._normalize_uuid(session_id)
+
+        try:
+            response = (
+                client.table("chat_logs")
+                .delete()
+                .eq("session_id", session_id_str)
+                .execute()
+            )
+
+            count = len(response.data) if response.data else 0
+            logger.info(f"Deleted {count} chat messages for session {session_id_str}")
+            return count
+
+        except Exception as e:
+            logger.warning(f"Failed to delete chat messages: {e}")
+            return 0
