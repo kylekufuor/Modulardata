@@ -64,6 +64,44 @@ def _sanitize_preview_rows(rows: list[dict]) -> list[dict]:
     ]
 
 
+def _build_welcome_message(filename: str, profile: Any, row_count: int) -> str:
+    """Build a welcome message for the chat based on the uploaded file profile."""
+    from lib.profiler import DataProfile
+
+    msg = f"Welcome to ModularData!\n\n"
+    msg += f"I'm your data transformation assistant. I help you clean, transform, and prepare your data through natural conversation.\n\n"
+    msg += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    msg += f"📊 Your Data: {filename}\n"
+    msg += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    msg += f"Rows: {row_count:,}  |  Columns: {profile.column_count}\n\n"
+
+    # List columns with types
+    msg += f"📋 Columns:\n"
+    for col in profile.columns:
+        null_info = f" ({col.null_count} missing)" if col.null_count > 0 else ""
+        semantic_type = col.semantic_type.value if hasattr(col.semantic_type, 'value') else str(col.semantic_type)
+        msg += f"  • {col.name} [{semantic_type}]{null_info}\n"
+
+    # Show issues if any
+    columns_with_issues = [col for col in profile.columns if col.null_count > 0]
+    columns_with_issues.sort(key=lambda c: c.null_count, reverse=True)
+
+    if columns_with_issues:
+        msg += f"\n⚠️ Issues Detected:\n"
+        for col in columns_with_issues[:5]:
+            pct = (col.null_count / row_count * 100) if row_count > 0 else 0
+            msg += f"  • {col.null_count:,} missing {col.name} ({pct:.1f}%)\n"
+        msg += f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += f"What would you like to tackle first?\n"
+        msg += f"(I noticed {columns_with_issues[0].name} has the most missing values)"
+    else:
+        msg += f"\n✅ No obvious issues detected - your data looks clean!\n"
+        msg += f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += f"What would you like to do with this data?"
+
+    return msg
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -194,6 +232,26 @@ async def upload_file(
         current_node_id=node["id"],
         original_filename=filename,
     )
+
+    # =============================================================================
+    # 6b. Save Welcome Message to Chat Logs
+    # =============================================================================
+
+    try:
+        from lib.supabase_client import SupabaseClient
+
+        # Build a simple welcome message that will be displayed in chat
+        welcome_message = _build_welcome_message(filename, profile, len(df))
+        SupabaseClient.insert_chat_message(
+            session_id=session_id_str,
+            role="assistant",
+            content=welcome_message,
+            node_id=node["id"],
+            metadata={"type": "welcome", "filename": filename},
+        )
+        logger.debug(f"Saved welcome message for session {session_id_str}")
+    except Exception as e:
+        logger.warning(f"Failed to save welcome message: {e}")
 
     # =============================================================================
     # 7. Return Response

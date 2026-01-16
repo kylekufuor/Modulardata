@@ -149,11 +149,11 @@ async def chat(
     # Handle special commands using flexible matching
     # Show plan commands
     if _matches_command(message_lower, ["show plan", "show me the plan", "what's the plan", "view plan"]):
-        return await _handle_show_plan(session_id_str)
+        return await _handle_show_plan(session_id_str, request.message)
 
     # Clear plan commands
     if _matches_command(message_lower, ["clear", "clear plan", "start over", "start fresh", "reset", "reset plan"]):
-        return await _handle_clear_plan(session_id_str)
+        return await _handle_clear_plan(session_id_str, request.message)
 
     # Apply plan commands
     if _matches_command(message_lower, ["apply", "apply plan", "apply changes", "execute", "do it", "run it"]):
@@ -196,7 +196,7 @@ def _matches_command(message: str, patterns: list[str]) -> bool:
     return False
 
 
-async def _handle_show_plan(session_id: str) -> ChatResponse:
+async def _handle_show_plan(session_id: str, user_message: str) -> ChatResponse:
     """Handle 'show plan' command."""
     plan = PlanService.get_or_create_plan(session_id)
 
@@ -206,24 +206,53 @@ async def _handle_show_plan(session_id: str) -> ChatResponse:
         summary = plan.to_summary()
         assistant_response = f"Here's what I have queued up for you:\n\n{summary}\n\nWant to add more changes, or shall I apply these?"
 
+    _save_chat_messages(session_id, user_message, assistant_response)
+
     return ChatResponse(
         session_id=session_id,
-        message="show plan",
+        message=user_message,
         plan=SessionPlanResponse.from_plan(plan),
         assistant_response=assistant_response,
     )
 
 
-async def _handle_clear_plan(session_id: str) -> ChatResponse:
+async def _handle_clear_plan(session_id: str, user_message: str) -> ChatResponse:
     """Handle 'clear plan' command."""
     plan = PlanService.clear_plan(session_id)
+    assistant_response = "All cleared! We're starting fresh. What would you like to do with your data?"
+
+    _save_chat_messages(session_id, user_message, assistant_response)
 
     return ChatResponse(
         session_id=session_id,
-        message="clear plan",
+        message=user_message,
         plan=SessionPlanResponse.from_plan(plan),
-        assistant_response="All cleared! We're starting fresh. What would you like to do with your data?",
+        assistant_response=assistant_response,
     )
+
+
+def _save_chat_messages(session_id: str, user_message: str, assistant_response: str) -> None:
+    """Save both user message and assistant response to chat_logs."""
+    from lib.supabase_client import SupabaseClient
+
+    try:
+        # Save user message
+        SupabaseClient.insert_chat_message(
+            session_id=session_id,
+            role="user",
+            content=user_message,
+        )
+
+        # Save assistant response
+        SupabaseClient.insert_chat_message(
+            session_id=session_id,
+            role="assistant",
+            content=assistant_response,
+        )
+
+        logger.debug(f"Saved chat messages for session {session_id}")
+    except Exception as e:
+        logger.warning(f"Failed to save chat messages: {e}")
 
 
 async def _handle_chat_message(session_id: str, message: str) -> ChatResponse:
@@ -252,6 +281,7 @@ async def _handle_chat_message(session_id: str, message: str) -> ChatResponse:
         if not is_on_topic and redirect_response:
             # Return redirect response for off-topic messages
             plan = PlanService.get_or_create_plan(session_id)
+            _save_chat_messages(session_id, message, redirect_response)
             return ChatResponse(
                 session_id=session_id,
                 message=message,
@@ -269,6 +299,7 @@ async def _handle_chat_message(session_id: str, message: str) -> ChatResponse:
                 message=message,
                 profile_data=profile_data,
             )
+            _save_chat_messages(session_id, message, assistant_response)
             return ChatResponse(
                 session_id=session_id,
                 message=message,
@@ -287,6 +318,7 @@ async def _handle_chat_message(session_id: str, message: str) -> ChatResponse:
                 message=message,
                 profile_data=profile_data,
             )
+            _save_chat_messages(session_id, message, assistant_response)
             return ChatResponse(
                 session_id=session_id,
                 message=message,
@@ -321,6 +353,9 @@ async def _handle_chat_message(session_id: str, message: str) -> ChatResponse:
             profile_data=profile_data,
             should_suggest_apply=plan.should_suggest_apply(),
         )
+
+        # Save messages to database
+        _save_chat_messages(session_id, message, assistant_response)
 
         return ChatResponse(
             session_id=session_id,
