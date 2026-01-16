@@ -1,3 +1,4 @@
+import React from 'react'
 import { Bot, User } from 'lucide-react'
 import type { ChatMessage as ChatMessageType } from '../types'
 
@@ -6,9 +7,9 @@ interface ChatMessageProps {
 }
 
 // Simple markdown-like parser for chat messages
-function formatMessage(content: string): JSX.Element[] {
+function formatMessage(content: string): React.ReactNode[] {
   const lines = content.split('\n')
-  const elements: JSX.Element[] = []
+  const elements: React.ReactNode[] = []
   let currentList: string[] = []
   let listKey = 0
 
@@ -78,9 +79,8 @@ function formatMessage(content: string): JSX.Element[] {
 }
 
 // Format inline text (bold, code, etc.)
-function formatInlineText(text: string): (string | JSX.Element)[] {
-  const parts: (string | JSX.Element)[] = []
-  let remaining = text
+function formatInlineText(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = []
   let keyIndex = 0
 
   // Match **bold** or `code`
