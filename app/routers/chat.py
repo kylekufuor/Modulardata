@@ -19,12 +19,17 @@ from pydantic import BaseModel, Field
 from app.auth import get_current_user, AuthUser
 from app.exceptions import SessionNotFoundError
 from core.services.session_service import SessionService
+from core.services.node_service import NodeService
 from core.services.plan_service import PlanService
 from core.models.plan import (
     ApplyPlanRequest,
     ApplyPlanResponse,
     PlanStatus,
     SessionPlanResponse,
+)
+from agents.response_generator import (
+    generate_plan_added_response,
+    generate_conversational_response,
 )
 
 logger = logging.getLogger(__name__)
@@ -159,9 +164,10 @@ async def _handle_show_plan(session_id: str) -> ChatResponse:
     plan = PlanService.get_or_create_plan(session_id)
 
     if not plan.steps:
-        assistant_response = "You don't have any transformations planned yet. Tell me what you'd like to do with your data!"
+        assistant_response = "You don't have any transformations planned yet. What would you like to do with your data? I can help you clean up missing values, remove duplicates, standardize formats, and more!"
     else:
-        assistant_response = plan.to_summary()
+        summary = plan.to_summary()
+        assistant_response = f"Here's what I have queued up for you:\n\n{summary}\n\nWant to add more changes, or shall I apply these?"
 
     return ChatResponse(
         session_id=session_id,
@@ -179,12 +185,12 @@ async def _handle_clear_plan(session_id: str) -> ChatResponse:
         session_id=session_id,
         message="clear plan",
         plan=SessionPlanResponse.from_plan(plan),
-        assistant_response="Plan cleared. What would you like to do with your data?",
+        assistant_response="All cleared! We're starting fresh. What would you like to do with your data?",
     )
 
 
 async def _handle_chat_message(session_id: str, message: str) -> ChatResponse:
-    """Process a chat message through the Strategist."""
+    """Process a chat message through the Strategist with conversational AI."""
     from agents.strategist import StrategistAgent
 
     try:
@@ -198,50 +204,71 @@ async def _handle_chat_message(session_id: str, message: str) -> ChatResponse:
                 detail="No data uploaded. Please upload a CSV file first."
             )
 
+        # Get profile data for conversational context
+        profile_data = current_node.get("profile_json", {})
+
+        # Check if this is a general question vs transformation request
+        is_question = _is_general_question(message)
+
+        if is_question:
+            # Use conversational AI for general questions
+            plan = PlanService.get_or_create_plan(session_id)
+            assistant_response = generate_conversational_response(
+                message=message,
+                profile_data=profile_data,
+            )
+            return ChatResponse(
+                session_id=session_id,
+                message=message,
+                plan=SessionPlanResponse.from_plan(plan),
+                assistant_response=assistant_response,
+            )
+
         # Run Strategist to create plan
         strategist = StrategistAgent()
         technical_plan = strategist.create_plan(session_id, message)
 
         if not technical_plan:
-            # Strategist couldn't understand - return clarification
+            # Strategist couldn't understand - use conversational AI
             plan = PlanService.get_or_create_plan(session_id)
+            assistant_response = generate_conversational_response(
+                message=message,
+                profile_data=profile_data,
+            )
             return ChatResponse(
                 session_id=session_id,
                 message=message,
                 plan=SessionPlanResponse.from_plan(plan),
-                assistant_response="I'm not sure what transformation you'd like. Could you be more specific? For example: 'remove rows where email is blank' or 'trim whitespace from all columns'.",
+                assistant_response=assistant_response,
             )
 
         # Add step to plan
-        # Note: transformation_type may be enum or string depending on use_enum_values
         trans_type = technical_plan.transformation_type
         if hasattr(trans_type, 'value'):
             trans_type = trans_type.value
+
+        target_columns = [tc.column_name for tc in technical_plan.target_columns] if technical_plan.target_columns else []
 
         plan = PlanService.add_step(
             session_id=session_id,
             transformation_type=str(trans_type),
             explanation=technical_plan.explanation,
-            target_columns=[tc.column_name for tc in technical_plan.target_columns] if technical_plan.target_columns else [],
+            target_columns=target_columns,
             parameters=technical_plan.parameters,
-            estimated_rows_affected=None,  # TODO: Estimate from profile
-            code_preview=None,  # TODO: Generate preview
+            estimated_rows_affected=None,
+            code_preview=None,
         )
 
-        # Build response
-        step_count = len(plan.steps)
-        if plan.should_suggest_apply():
-            assistant_response = (
-                f"Added to plan: {technical_plan.explanation}\n\n"
-                f"You now have {step_count} transformation(s) planned. "
-                f"Ready to apply them? Use 'apply' or add more changes."
-            )
-        else:
-            assistant_response = (
-                f"Added to plan: {technical_plan.explanation}\n\n"
-                f"Plan now has {step_count} transformation(s). "
-                f"Keep adding or say 'apply' when ready."
-            )
+        # Generate friendly conversational response
+        assistant_response = generate_plan_added_response(
+            plan_explanation=technical_plan.explanation,
+            transformation_type=str(trans_type),
+            target_columns=target_columns,
+            confidence=technical_plan.confidence,
+            step_count=len(plan.steps),
+            profile_data=profile_data,
+            should_suggest_apply=plan.should_suggest_apply(),
+        )
 
         return ChatResponse(
             session_id=session_id,
@@ -255,6 +282,44 @@ async def _handle_chat_message(session_id: str, message: str) -> ChatResponse:
     except Exception as e:
         logger.exception(f"Chat processing failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to process message: {str(e)}")
+
+
+def _is_general_question(message: str) -> bool:
+    """
+    Check if the message is a general question vs transformation request.
+
+    General questions are handled by conversational AI.
+    Transformation requests go through the Strategist.
+    """
+    message_lower = message.lower().strip()
+
+    # Question patterns
+    question_starters = [
+        "what is", "what are", "what's", "whats",
+        "how many", "how much",
+        "tell me about", "describe", "explain",
+        "show me", "can you tell",
+        "what does", "what do",
+        "is there", "are there",
+        "do i have", "does this",
+    ]
+
+    # Check if it starts with a question pattern
+    for starter in question_starters:
+        if message_lower.startswith(starter):
+            return True
+
+    # Check if it ends with a question mark but doesn't have transformation keywords
+    if message_lower.endswith("?"):
+        transform_keywords = [
+            "remove", "delete", "drop", "clean", "fill", "replace", "rename",
+            "convert", "format", "deduplicate", "merge", "split", "trim",
+            "standardize", "fix", "change", "update", "undo", "filter",
+        ]
+        if not any(keyword in message_lower for keyword in transform_keywords):
+            return True
+
+    return False
 
 
 # =============================================================================
