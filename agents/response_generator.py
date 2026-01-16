@@ -173,7 +173,7 @@ def generate_transformation_response(
     Generate a friendly response for a transformation being added to the plan.
 
     Args:
-        plan_explanation: The plan's explanation
+        plan_explanation: The plan's explanation (should be used as the primary response)
         transformation_type: Type of transformation
         target_columns: Columns being transformed
         confidence: Confidence level (0-1)
@@ -194,27 +194,31 @@ def generate_transformation_response(
     else:
         conf_phrase = "I'm not entirely sure, but I could"
 
-    cols_str = ", ".join(target_columns) if target_columns else "the data"
-
-    # Action descriptions based on transformation type
-    action_templates = {
-        "drop_rows": f"{conf_phrase} remove rows where {cols_str} has issues",
-        "filter_rows": f"{conf_phrase} keep only the rows that match your criteria",
-        "deduplicate": f"{conf_phrase} remove duplicate rows from your data",
-        "drop_columns": f"{conf_phrase} remove the {cols_str} column{'s' if len(target_columns) > 1 else ''}",
-        "rename_column": f"{conf_phrase} rename '{target_columns[0] if target_columns else 'the column'}'",
-        "fill_nulls": f"{conf_phrase} fill the missing values in {cols_str}",
-        "replace_values": f"{conf_phrase} replace values in {cols_str}",
-        "standardize": f"{conf_phrase} standardize the format of {cols_str}",
-        "trim_whitespace": f"{conf_phrase} clean up extra spaces in {cols_str}",
-        "change_case": f"{conf_phrase} change the text case in {cols_str}",
-        "parse_date": f"{conf_phrase} convert {cols_str} to a proper date format",
-        "format_date": f"{conf_phrase} reformat the dates in {cols_str}",
-        "convert_type": f"{conf_phrase} convert the data type of {cols_str}",
-        "undo": "I'll undo the last change and restore your previous version",
-    }
-
-    base_response = action_templates.get(transformation_type, plan_explanation)
+    # Use the plan_explanation directly - it contains the specific user request
+    # Only fall back to templates for very generic cases
+    if plan_explanation and len(plan_explanation) > 10:
+        # Use the actual explanation from the Strategist
+        base_response = f"{conf_phrase} {plan_explanation[0].lower()}{plan_explanation[1:]}"
+    else:
+        # Fallback to simple templates only when explanation is missing
+        cols_str = ", ".join(target_columns) if target_columns else "the data"
+        action_templates = {
+            "drop_rows": f"{conf_phrase} remove the matching rows",
+            "filter_rows": f"{conf_phrase} keep only the rows that match your criteria",
+            "deduplicate": f"{conf_phrase} remove duplicate rows from your data",
+            "drop_columns": f"{conf_phrase} remove the {cols_str} column{'s' if len(target_columns) > 1 else ''}",
+            "rename_column": f"{conf_phrase} rename '{target_columns[0] if target_columns else 'the column'}'",
+            "fill_nulls": f"{conf_phrase} fill the missing values in {cols_str}",
+            "replace_values": f"{conf_phrase} replace values in {cols_str}",
+            "standardize": f"{conf_phrase} standardize the format of {cols_str}",
+            "trim_whitespace": f"{conf_phrase} clean up extra spaces in {cols_str}",
+            "change_case": f"{conf_phrase} change the text case in {cols_str}",
+            "parse_date": f"{conf_phrase} convert {cols_str} to a proper date format",
+            "format_date": f"{conf_phrase} reformat the dates in {cols_str}",
+            "convert_type": f"{conf_phrase} convert the data type of {cols_str}",
+            "undo": "I'll undo the last change and restore your previous version",
+        }
+        base_response = action_templates.get(transformation_type, f"{conf_phrase} apply the transformation")
 
     # Add period if not already there
     if not base_response.endswith("."):
@@ -240,7 +244,7 @@ def get_proactive_suggestion(profile_data: dict, just_fixed_columns: list[str] |
         Suggestion string or empty string
     """
     if not profile_data:
-        return ""
+        return "What else would you like to do?"
 
     columns = profile_data.get("columns", [])
 
@@ -257,13 +261,15 @@ def get_proactive_suggestion(profile_data: dict, just_fixed_columns: list[str] |
             })
 
     if not issues:
-        return "Your data is looking clean! What else would you like to do?"
+        # Don't say "data is clean" - transformations haven't been applied yet
+        # Just ask what else they want to do
+        return "What else would you like to do?"
 
     # Suggest fixing the biggest issue
     issues.sort(key=lambda x: x["count"], reverse=True)
     top_issue = issues[0]
 
-    return f"'{top_issue['column']}' still has {top_issue['count']} missing values. Want me to fix those too?"
+    return f"'{top_issue['column']}' has {top_issue['count']} missing values. Want me to fix those too?"
 
 
 def generate_plan_added_response(
