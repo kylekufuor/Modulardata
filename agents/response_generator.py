@@ -6,20 +6,19 @@
 # =============================================================================
 
 import logging
-from openai import OpenAI
-
-from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Initialize OpenAI client
+# Lazy-loaded OpenAI client
 _client = None
 
 
-def get_openai_client() -> OpenAI:
-    """Get or create OpenAI client."""
+def get_openai_client():
+    """Get or create OpenAI client (lazy initialization)."""
     global _client
     if _client is None:
+        from openai import OpenAI
+        from app.config import settings
         _client = OpenAI(api_key=settings.OPENAI_API_KEY)
     return _client
 
@@ -131,7 +130,35 @@ Guidelines:
         return response.choices[0].message.content
     except Exception as e:
         logger.error(f"OpenAI API error: {e}")
-        return "I'm having trouble processing that right now. Could you try again?"
+        # Fallback to a simple response based on data summary
+        return _generate_fallback_response(profile_data)
+
+
+def _generate_fallback_response(profile_data: dict) -> str:
+    """Generate a fallback response when OpenAI is not available."""
+    if not profile_data:
+        return "I can see your data is loaded. What would you like to do with it?"
+
+    row_count = profile_data.get("row_count", 0)
+    column_count = profile_data.get("column_count", 0)
+    columns = profile_data.get("columns", [])
+
+    # Find issues
+    issues = []
+    for col in columns:
+        null_count = col.get("null_count", 0)
+        if null_count > 0:
+            issues.append(f"{col.get('name', 'unknown')} has {null_count} missing values")
+
+    response = f"Your data has {row_count:,} rows and {column_count} columns."
+
+    if issues:
+        response += f" I noticed some data quality issues: {issues[0]}."
+        response += " Would you like me to help clean that up?"
+    else:
+        response += " The data looks clean! What would you like to do with it?"
+
+    return response
 
 
 def generate_transformation_response(

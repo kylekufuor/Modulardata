@@ -136,7 +136,7 @@ async def get_data(
     # Return based on format
     if format == "json":
         # Replace NaN with None for JSON serialization
-        data = df.where(df.notnull(), None).to_dict(orient="records")
+        data = df.replace({float('nan'): None}).to_dict(orient="records")
         return {
             "session_id": session_id_str,
             "node_id": current_node["id"],
@@ -204,7 +204,7 @@ async def get_preview(
 
     df = StorageService.download_csv(storage_path)
     # Replace NaN with None for JSON serialization
-    preview = df.head(rows).where(df.head(rows).notnull(), None).to_dict(orient="records")
+    preview = df.head(rows).replace({float('nan'): None}).to_dict(orient="records")
 
     return {
         "session_id": session_id_str,
@@ -258,7 +258,7 @@ async def get_node_data(
 
     if format == "json":
         # Replace NaN with None for JSON serialization
-        data = df.where(df.notnull(), None).to_dict(orient="records")
+        data = df.replace({float('nan'): None}).to_dict(orient="records")
         return {
             "session_id": session_id_str,
             "node_id": node_id_str,
