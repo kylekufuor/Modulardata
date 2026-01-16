@@ -506,8 +506,8 @@ export default function SessionPage() {
             )}
           </div>
 
-          {/* Plan Preview */}
-          {currentPlan && showPlanPreview && (
+          {/* Plan Preview - only show when there are steps */}
+          {currentPlan && showPlanPreview && currentPlan.step_count > 0 && (
             <div className={`border-t p-4 transition-colors ${
               currentPlan.step_count >= 3
                 ? 'bg-gradient-to-r from-blue-50 to-emerald-50 border-blue-300'
