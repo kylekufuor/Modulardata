@@ -617,8 +617,12 @@ def process_plan_apply(
         # Revert to draft if module was deployed (editing a deployed module)
         SessionService.revert_to_draft(session_id)
 
-        # Mark plan as applied
-        PlanService.mark_applied(plan_id, node["id"])
+        # Mark plan as applied (skip if plan doesn't exist - e.g., Transform mode)
+        try:
+            PlanService.mark_applied(plan_id, node["id"])
+        except Exception as mark_error:
+            # Plan may not exist if this is a direct Transform mode execution
+            logger.debug(f"Could not mark plan as applied (may be Transform mode): {mark_error}")
 
         # Step 4: Done
         update_progress(4, 4, "Complete!")
