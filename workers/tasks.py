@@ -41,6 +41,89 @@ def update_progress(current: int, total: int, message: str = "Processing..."):
         )
 
 
+def create_short_node_label(steps: list[dict], max_length: int = 60) -> str:
+    """
+    Create a short, readable label for a node based on transformation steps.
+
+    Args:
+        steps: List of transformation step dicts
+        max_length: Maximum label length
+
+    Returns:
+        Short label like "Fill email & age nulls" or "3 transformations"
+    """
+    if not steps:
+        return "Transformation"
+
+    if len(steps) == 1:
+        # Single step - create short version
+        step = steps[0]
+        trans_type = step.get("transformation_type", "transform")
+        columns = step.get("target_columns", [])
+
+        # Create short labels based on type
+        type_labels = {
+            "fill_nulls": "Fill nulls",
+            "drop_rows": "Remove rows",
+            "drop_columns": "Remove columns",
+            "deduplicate": "Deduplicate",
+            "trim_whitespace": "Trim whitespace",
+            "standardize": "Standardize",
+            "rename_column": "Rename column",
+            "replace_values": "Replace values",
+            "change_case": "Change case",
+            "parse_date": "Parse dates",
+            "format_date": "Format dates",
+            "convert_type": "Convert type",
+            "filter_rows": "Filter rows",
+        }
+
+        base = type_labels.get(trans_type, "Transform")
+
+        if columns:
+            if len(columns) == 1:
+                label = f"{base} in {columns[0]}"
+            elif len(columns) <= 3:
+                label = f"{base} in {', '.join(columns)}"
+            else:
+                label = f"{base} in {len(columns)} columns"
+        else:
+            label = base
+
+        return label[:max_length]
+
+    else:
+        # Multiple steps - summarize
+        trans_types = [s.get("transformation_type", "") for s in steps]
+        unique_types = list(set(trans_types))
+
+        # Get all affected columns
+        all_columns = []
+        for s in steps:
+            all_columns.extend(s.get("target_columns", []))
+        unique_columns = list(set(all_columns))
+
+        if len(unique_types) == 1:
+            # Same operation on multiple columns
+            type_label = {
+                "fill_nulls": "Fill nulls",
+                "drop_rows": "Remove rows",
+                "trim_whitespace": "Trim",
+            }.get(unique_types[0], "Transform")
+
+            if len(unique_columns) <= 3:
+                label = f"{type_label} in {', '.join(unique_columns)}"
+            else:
+                label = f"{type_label} in {len(unique_columns)} columns"
+        else:
+            # Different operations
+            label = f"{len(steps)} transformations"
+            if unique_columns and len(unique_columns) <= 2:
+                label += f" on {', '.join(unique_columns)}"
+
+        return label[:max_length]
+
+
 # =============================================================================
 # Chat Processing Task
 # =============================================================================
@@ -505,8 +588,8 @@ def process_plan_apply(
         # Generate profile
         profile = generate_profile(df)
 
-        # Create new node
-        combined_explanation = "; ".join(all_explanations)
+        # Create new node with short label for display
+        short_label = create_short_node_label(steps)
         combined_code = "\n".join(all_code)
 
         node = NodeService.create_node(
@@ -516,7 +599,7 @@ def process_plan_apply(
             row_count=len(df),
             column_count=len(df.columns),
             profile_json=profile.model_dump(),
-            transformation=combined_explanation,
+            transformation=short_label,
             transformation_code=combined_code,
             preview_rows=df.head(10).to_dict(orient="records"),
             node_id=new_node_id,
@@ -543,7 +626,7 @@ def process_plan_apply(
             publish_node_created(
                 session_id=session_id,
                 node_id=node["id"],
-                transformation=combined_explanation,
+                transformation=short_label,
                 row_count=rows_after,
                 column_count=len(df.columns),
             )

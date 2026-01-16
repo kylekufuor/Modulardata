@@ -309,10 +309,22 @@ export default function SessionPage() {
     if (!sessionId || !currentPlan) return
 
     setApplyingPlan(true)
+    const stepCount = currentPlan.step_count
     try {
       await api.applyPlan(sessionId)
+
+      // Add success message to chat
+      const successMsg: ChatMessageType = {
+        id: `apply-${Date.now()}`,
+        role: 'assistant',
+        content: `✅ Done! Applied ${stepCount} transformation${stepCount > 1 ? 's' : ''} to your data.\n\nYour data has been updated. What would you like to do next?`,
+        created_at: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, successMsg])
+
       setCurrentPlan(null)
-      await loadSessionData()
+      setShowPlanPreview(false)
+      await loadSessionData(true) // preserve messages
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to apply plan')
     } finally {
