@@ -65,39 +65,23 @@ def _sanitize_preview_rows(rows: list[dict]) -> list[dict]:
 
 
 def _build_welcome_message(filename: str, profile: Any, row_count: int) -> str:
-    """Build a welcome message for the chat based on the uploaded file profile."""
-    from lib.profiler import DataProfile
-
-    msg = f"Welcome to ModularData!\n\n"
-    msg += f"I'm your data transformation assistant. I help you clean, transform, and prepare your data through natural conversation.\n\n"
-    msg += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    msg += f"📊 Your Data: {filename}\n"
-    msg += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    msg += f"Rows: {row_count:,}  |  Columns: {profile.column_count}\n\n"
-
-    # List columns with types
-    msg += f"📋 Columns:\n"
-    for col in profile.columns:
-        null_info = f" ({col.null_count} missing)" if col.null_count > 0 else ""
-        semantic_type = col.semantic_type.value if hasattr(col.semantic_type, 'value') else str(col.semantic_type)
-        msg += f"  • {col.name} [{semantic_type}]{null_info}\n"
-
-    # Show issues if any
+    """Build a card-style welcome message for the chat."""
+    # Count total missing values
+    total_missing = sum(col.null_count for col in profile.columns if col.null_count > 0)
     columns_with_issues = [col for col in profile.columns if col.null_count > 0]
     columns_with_issues.sort(key=lambda c: c.null_count, reverse=True)
 
+    msg = f"📊 {filename} loaded!\n\n"
+    msg += f"   {row_count:,} rows  •  {profile.column_count} columns\n\n"
+
     if columns_with_issues:
-        msg += f"\n⚠️ Issues Detected:\n"
-        for col in columns_with_issues[:5]:
-            pct = (col.null_count / row_count * 100) if row_count > 0 else 0
-            msg += f"  • {col.null_count:,} missing {col.name} ({pct:.1f}%)\n"
-        msg += f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        msg += f"What would you like to tackle first?\n"
-        msg += f"(I noticed {columns_with_issues[0].name} has the most missing values)"
+        top_issue = columns_with_issues[0]
+        msg += f"⚠️ Found {total_missing} missing values across {len(columns_with_issues)} columns\n"
+        msg += f"   → {top_issue.name} has the most ({top_issue.null_count} missing)\n\n"
+        msg += "How can I help clean this data?"
     else:
-        msg += f"\n✅ No obvious issues detected - your data looks clean!\n"
-        msg += f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        msg += f"What would you like to do with this data?"
+        msg += "✅ Data looks clean!\n\n"
+        msg += "What would you like to do with it?"
 
     return msg
 

@@ -209,81 +209,51 @@ export default function SessionPage() {
     }
   }
 
-  // Build welcome message from profile API response (for page reload)
+  // Build welcome message from profile API response (for page reload) - card style
   const buildWelcomeMessageFromProfile = (filename: string, profileData: { row_count: number; column_count: number; profile?: { columns?: Array<{ name: string; semantic_type: string; null_count: number }> } }): string => {
     const { row_count, column_count, profile } = profileData
     const columns = profile?.columns || []
 
-    let message = `Welcome back! 👋\n\n`
-    message += `I'm your data transformation assistant. Let's continue working on your data.\n\n`
-    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-    message += `📊 Your Data: ${filename}\n`
-    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-    message += `Rows: ${row_count.toLocaleString()}  |  Columns: ${column_count}\n\n`
+    const columnsWithIssues = columns.filter(col => col.null_count > 0)
+      .sort((a, b) => b.null_count - a.null_count)
+    const totalMissing = columnsWithIssues.reduce((sum, col) => sum + col.null_count, 0)
 
-    if (columns.length > 0) {
-      message += `📋 Columns:\n`
-      columns.forEach((col) => {
-        const nullInfo = col.null_count > 0 ? ` (${col.null_count} missing)` : ''
-        message += `  • ${col.name} [${col.semantic_type}]${nullInfo}\n`
-      })
+    let message = `📊 ${filename} loaded!\n\n`
+    message += `   ${row_count.toLocaleString()} rows  •  ${column_count} columns\n\n`
 
-      const columnsWithIssues = columns.filter(col => col.null_count > 0)
-        .sort((a, b) => b.null_count - a.null_count)
-
-      if (columnsWithIssues.length > 0) {
-        message += `\n⚠️ Issues Detected:\n`
-        columnsWithIssues.slice(0, 5).forEach((col) => {
-          const pct = row_count > 0 ? ((col.null_count / row_count) * 100).toFixed(1) : '0'
-          message += `  • ${col.null_count.toLocaleString()} missing ${col.name} (${pct}%)\n`
-        })
-      }
+    if (columnsWithIssues.length > 0) {
+      const topIssue = columnsWithIssues[0]
+      message += `⚠️ Found ${totalMissing} missing values across ${columnsWithIssues.length} columns\n`
+      message += `   → ${topIssue.name} has the most (${topIssue.null_count} missing)\n\n`
+      message += `How can I help clean this data?`
+    } else {
+      message += `✅ Data looks clean!\n\n`
+      message += `What would you like to do with it?`
     }
-
-    message += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-    message += `What would you like to do with this data?`
 
     return message
   }
 
-  // Build welcome message from upload response (for new upload)
+  // Build welcome message from upload response (for new upload) - card style
   const buildWelcomeMessage = (response: UploadResponse): string => {
     const { filename, profile } = response
     const { row_count, column_count, columns } = profile
 
-    let message = `Welcome to ModularData! 👋\n\n`
-    message += `I'm your data transformation assistant. I help you clean, transform, and prepare your data through natural conversation.\n\n`
-    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-    message += `📊 Your Data: ${filename}\n`
-    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-    message += `Rows: ${row_count.toLocaleString()}  |  Columns: ${column_count}\n\n`
-
-    // List columns with types and missing values
-    message += `📋 Columns:\n`
-    columns.forEach((col) => {
-      const nullInfo = col.null_count > 0
-        ? ` (${col.null_count} missing)`
-        : ''
-      message += `  • ${col.name} [${col.semantic_type}]${nullInfo}\n`
-    })
-
-    // Show issues if any columns have missing values
     const columnsWithIssues = columns.filter(col => col.null_count > 0)
       .sort((a, b) => b.null_count - a.null_count)
+    const totalMissing = columnsWithIssues.reduce((sum, col) => sum + col.null_count, 0)
+
+    let message = `📊 ${filename} loaded!\n\n`
+    message += `   ${row_count.toLocaleString()} rows  •  ${column_count} columns\n\n`
 
     if (columnsWithIssues.length > 0) {
-      message += `\n⚠️ Issues Detected:\n`
-      columnsWithIssues.slice(0, 5).forEach((col) => {
-        const pct = row_count > 0 ? ((col.null_count / row_count) * 100).toFixed(1) : '0'
-        message += `  • ${col.null_count.toLocaleString()} missing ${col.name} (${pct}%)\n`
-      })
-      message += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-      message += `What would you like to tackle first?\n`
-      message += `(I noticed ${columnsWithIssues[0].name} has the most missing values)`
+      const topIssue = columnsWithIssues[0]
+      message += `⚠️ Found ${totalMissing} missing values across ${columnsWithIssues.length} columns\n`
+      message += `   → ${topIssue.name} has the most (${topIssue.null_count} missing)\n\n`
+      message += `How can I help clean this data?`
     } else {
-      message += `\n✅ No obvious issues detected - your data looks clean!\n`
-      message += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
-      message += `What would you like to do with this data?`
+      message += `✅ Data looks clean!\n\n`
+      message += `What would you like to do with it?`
     }
 
     return message
@@ -548,34 +518,42 @@ export default function SessionPage() {
                   </div>
                 ))}
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleApplyPlan}
-                  disabled={applyingPlan}
-                  className={`flex-1 px-3 py-2 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-all ${
-                    currentPlan.step_count >= 3
-                      ? 'bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-200'
-                      : 'bg-blue-600 hover:bg-blue-700'
-                  }`}
-                >
-                  {applyingPlan ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Applying...
-                    </span>
-                  ) : (
-                    <span className="flex items-center justify-center gap-2">
-                      <Zap className="w-4 h-4" />
-                      Apply {currentPlan.step_count >= 3 ? 'All' : 'Plan'}
-                    </span>
-                  )}
-                </button>
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleApplyPlan}
+                    disabled={applyingPlan}
+                    className={`flex-1 px-3 py-2 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-all ${
+                      currentPlan.step_count >= 3
+                        ? 'bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-200'
+                        : 'bg-blue-600 hover:bg-blue-700'
+                    }`}
+                  >
+                    {applyingPlan ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Applying...
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-2">
+                        <Zap className="w-4 h-4" />
+                        Apply {currentPlan.step_count >= 3 ? 'All' : 'Plan'}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setShowPlanPreview(false)}
+                    className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg border border-gray-300"
+                    title="Dismiss and keep adding transformations"
+                  >
+                    Keep Adding
+                  </button>
+                </div>
                 <button
                   onClick={handleClearPlan}
-                  className="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-medium rounded-lg"
-                  title="Clear all steps"
+                  className="text-xs text-gray-500 hover:text-gray-700 hover:underline self-center"
                 >
-                  Clear
+                  Clear all steps
                 </button>
               </div>
             </div>

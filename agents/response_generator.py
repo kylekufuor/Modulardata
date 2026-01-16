@@ -299,10 +299,10 @@ def generate_plan_added_response(
         profile_data=profile_data,
     )
 
-    # Add plan status
+    # Add plan status - only suggest applying when 3+ steps
     if should_suggest_apply:
-        plan_status = f"\n\nYou now have {step_count} transformation(s) queued up. Ready to apply them all, or want to add more?"
+        plan_status = f"\n\nAdded to your plan ({step_count} steps queued). Ready to apply them all, or want to add more?"
     else:
-        plan_status = f"\n\nAdded to your plan ({step_count} step{'s' if step_count > 1 else ''} queued). Keep adding changes or say 'apply' when ready!"
+        plan_status = f"\n\nAdded to your plan ({step_count} step{'s' if step_count > 1 else ''} queued)."
 
     return trans_response + plan_status
