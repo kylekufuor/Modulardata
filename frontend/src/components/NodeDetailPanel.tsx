@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { X, Loader2, Table, Code, BarChart3, Upload, GitBranch, FileSpreadsheet, ArrowRight, ChevronRight, Pencil, Check } from 'lucide-react'
+import { X, Loader2, Table, Code, BarChart3, Upload, GitBranch, FileSpreadsheet, ArrowRight, ChevronRight, Pencil, Check, Download } from 'lucide-react'
 import { api } from '../lib/api'
 import type { Node, ColumnProfile } from '../types'
 
@@ -60,6 +60,9 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
   const [editedName, setEditedName] = useState(node.transformation || '')
   const [savingName, setSavingName] = useState(false)
   const nameInputRef = useRef<HTMLInputElement>(null)
+
+  // Download state
+  const [downloading, setDownloading] = useState(false)
 
   const isOriginal = !node.parent_id
 
@@ -214,6 +217,23 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
     }
   }
 
+  // Download handler
+  const handleDownload = async () => {
+    setDownloading(true)
+    setError('')
+    try {
+      const filename = node.transformation
+        ? `${node.transformation.slice(0, 30).replace(/[^a-z0-9]/gi, '_')}.csv`
+        : `data_${node.id.slice(0, 8)}.csv`
+      await api.downloadNodeData(sessionId, node.id, filename)
+    } catch (err) {
+      console.error('Download failed:', err)
+      setError(err instanceof Error ? err.message : 'Download failed')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   // Close on escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -345,7 +365,21 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
           <div className="flex-1" />
 
           {/* Actions */}
-          <div className="px-4 py-3 border-t border-gray-200">
+          <div className="px-4 py-3 border-t border-gray-200 space-y-2">
+            {/* Download - available for all nodes */}
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {downloading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              {downloading ? 'Downloading...' : 'Download CSV'}
+            </button>
+
             {onBranchFromNode && !isOriginal && (
               <button
                 onClick={() => onBranchFromNode(node.id)}

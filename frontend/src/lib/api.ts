@@ -114,4 +114,35 @@ export const api = {
 
   getNodeProfile: (sessionId: string, nodeId: string) =>
     fetchWithAuth(`/api/v1/sessions/${sessionId}/nodes/${nodeId}/profile`),
+
+  // Download
+  downloadNodeData: async (sessionId: string, nodeId: string, filename?: string) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) throw new Error('Not authenticated')
+
+    const response = await fetch(
+      `${API_URL}/api/v1/sessions/${sessionId}/nodes/${nodeId}/data?format=csv`,
+      {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Download failed' }))
+      throw new Error(error.detail || 'Download failed')
+    }
+
+    // Get the blob and trigger download
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename || `data_${nodeId.slice(0, 8)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+  },
 }
