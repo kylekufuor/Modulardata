@@ -274,4 +274,17 @@ export const api = {
 
     return response.json()
   },
+
+  // Feedback
+  submitFeedback: (data: {
+    session_id: string
+    message_id: string
+    rating: 'positive' | 'negative'
+    comment?: string
+    node_id?: string
+    transformation_type?: string
+  }) => fetchWithAuth('/api/v1/feedback', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
 }

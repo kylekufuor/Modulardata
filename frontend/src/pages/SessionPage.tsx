@@ -680,7 +680,12 @@ export default function SessionPage() {
             ) : (
               <>
                 {messages.map((msg) => (
-                  <ChatMessageBubble key={msg.id} message={msg} />
+                  <ChatMessageBubble
+                    key={msg.id}
+                    message={msg}
+                    sessionId={sessionId || undefined}
+                    showFeedback={true}
+                  />
                 ))}
                 {/* Transformation suggestions - show after welcome for original data only */}
                 {showSuggestions && dataProfile && dataNodes.length === 1 && !sending && (

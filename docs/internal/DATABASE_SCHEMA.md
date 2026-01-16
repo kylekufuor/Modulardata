@@ -325,7 +325,23 @@ CREATE TABLE IF NOT EXISTS plan_steps (
 
 CREATE INDEX IF NOT EXISTS idx_plan_steps_plan ON plan_steps(plan_id);
 
--- 6. Add foreign key for current_node_id (after nodes table exists)
+-- 6. Feedback (user ratings for AI responses)
+CREATE TABLE IF NOT EXISTS feedback (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
+    message_id UUID REFERENCES chat_logs(id) ON DELETE CASCADE,
+    node_id UUID REFERENCES nodes(id) ON DELETE SET NULL,
+    rating TEXT NOT NULL CHECK (rating IN ('positive', 'negative')),
+    comment TEXT,
+    transformation_type TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_session ON feedback(session_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_rating ON feedback(rating);
+CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at);
+
+-- 7. Add foreign key for current_node_id (after nodes table exists)
 ALTER TABLE sessions
 ADD CONSTRAINT fk_current_node
 FOREIGN KEY (current_node_id) REFERENCES nodes(id);

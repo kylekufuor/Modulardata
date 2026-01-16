@@ -1,9 +1,12 @@
-import React from 'react'
-import { Bot, User } from 'lucide-react'
+import React, { useState } from 'react'
+import { Bot, User, ThumbsUp, ThumbsDown, Send, X } from 'lucide-react'
 import type { ChatMessage as ChatMessageType } from '../types'
+import { api } from '../lib/api'
 
 interface ChatMessageProps {
   message: ChatMessageType
+  sessionId?: string
+  showFeedback?: boolean
 }
 
 // Simple markdown-like parser for chat messages
@@ -126,8 +129,86 @@ function formatTime(dateString: string): string {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-export default function ChatMessage({ message }: ChatMessageProps) {
+export default function ChatMessage({ message, sessionId, showFeedback = false }: ChatMessageProps) {
   const isUser = message.role === 'user'
+  const [feedbackGiven, setFeedbackGiven] = useState<'positive' | 'negative' | null>(null)
+  const [showCommentInput, setShowCommentInput] = useState(false)
+  const [comment, setComment] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  // Check if this message indicates a completed transformation
+  const isTransformationResult = !isUser && (
+    message.content.startsWith('Done!') ||
+    message.content.includes('Applied') ||
+    message.content.includes('transformation')
+  )
+
+  const shouldShowFeedback = showFeedback && isTransformationResult && sessionId && !feedbackGiven
+
+  const handleFeedback = async (rating: 'positive' | 'negative') => {
+    if (!sessionId) return
+
+    if (rating === 'negative') {
+      setShowCommentInput(true)
+      setFeedbackGiven(rating)
+      return
+    }
+
+    // Positive feedback - submit immediately
+    try {
+      setSubmitting(true)
+      await api.submitFeedback({
+        session_id: sessionId,
+        message_id: message.id,
+        rating,
+        node_id: message.node_id,
+      })
+      setFeedbackGiven(rating)
+    } catch (err) {
+      console.error('Failed to submit feedback:', err)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleCommentSubmit = async () => {
+    if (!sessionId) return
+
+    try {
+      setSubmitting(true)
+      await api.submitFeedback({
+        session_id: sessionId,
+        message_id: message.id,
+        rating: 'negative',
+        comment: comment.trim() || undefined,
+        node_id: message.node_id,
+      })
+      setShowCommentInput(false)
+    } catch (err) {
+      console.error('Failed to submit feedback:', err)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleSkipComment = async () => {
+    if (!sessionId) return
+
+    try {
+      setSubmitting(true)
+      await api.submitFeedback({
+        session_id: sessionId,
+        message_id: message.id,
+        rating: 'negative',
+        node_id: message.node_id,
+      })
+      setShowCommentInput(false)
+    } catch (err) {
+      console.error('Failed to submit feedback:', err)
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
@@ -161,6 +242,84 @@ export default function ChatMessage({ message }: ChatMessageProps) {
             </div>
           )}
         </div>
+
+        {/* Feedback buttons */}
+        {shouldShowFeedback && (
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-xs text-gray-400">Was this helpful?</span>
+            <button
+              onClick={() => handleFeedback('positive')}
+              disabled={submitting}
+              className="p-1.5 hover:bg-green-50 rounded-full text-gray-400 hover:text-green-600 transition-colors disabled:opacity-50"
+              title="Yes, this was helpful"
+            >
+              <ThumbsUp className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleFeedback('negative')}
+              disabled={submitting}
+              className="p-1.5 hover:bg-red-50 rounded-full text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
+              title="No, this wasn't right"
+            >
+              <ThumbsDown className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Feedback given indicator */}
+        {feedbackGiven && !showCommentInput && (
+          <div className="flex items-center gap-1.5 mt-2 text-xs text-gray-400">
+            {feedbackGiven === 'positive' ? (
+              <>
+                <ThumbsUp className="w-3.5 h-3.5 text-green-500" />
+                <span>Thanks for your feedback!</span>
+              </>
+            ) : (
+              <>
+                <ThumbsDown className="w-3.5 h-3.5 text-red-500" />
+                <span>Thanks for letting us know</span>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Comment input for negative feedback */}
+        {showCommentInput && (
+          <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <p className="text-xs text-gray-600 mb-2">What went wrong? (optional)</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="e.g., It filtered the wrong column..."
+                className="flex-1 text-sm px-3 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleCommentSubmit()
+                  }
+                }}
+              />
+              <button
+                onClick={handleCommentSubmit}
+                disabled={submitting}
+                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+              <button
+                onClick={handleSkipComment}
+                disabled={submitting}
+                className="px-2 py-1.5 text-gray-500 hover:text-gray-700 text-sm"
+                title="Skip"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className={`text-xs text-gray-400 mt-1 ${isUser ? 'text-right' : ''}`}>
           {formatTime(message.created_at)}
         </div>
