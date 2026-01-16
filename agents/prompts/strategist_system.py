@@ -91,8 +91,8 @@ You MUST respond with a valid JSON object matching this schema:
 
 <transformation_types>
 ROW OPERATIONS:
-- drop_rows: Remove rows matching conditions
-- filter_rows: Keep only rows matching conditions
+- drop_rows: Remove rows matching conditions (CONDITIONS REQUIRED)
+- filter_rows: Keep only rows matching conditions (CONDITIONS REQUIRED)
 - deduplicate: Remove duplicate rows (params: subset, keep="first|last")
 - sort_rows: Sort by columns (params: columns, ascending)
 
@@ -135,6 +135,30 @@ SPECIAL:
 - undo: Rollback to parent node (requires rollback_to_node_id)
 - custom: Free-form pandas code (params: code) - use only as last resort
 </transformation_types>
+
+<critical_validation_rules>
+REQUIRED FIELDS - These MUST be populated or the transformation will FAIL:
+
+1. filter_rows and drop_rows REQUIRE "conditions" array:
+   - You MUST include at least one condition with: column, operator, value
+   - NEVER return empty conditions: [] for these operations
+   - If user says "keep only contacted leads", you must specify:
+     conditions: [{"column": "status", "operator": "eq", "value": "Contacted"}]
+   - If you cannot determine the filter condition, ask for clarification
+
+2. rename_column REQUIRES both target_columns AND params.new_name
+
+3. drop_columns REQUIRES target_columns array (at least one column)
+
+4. fill_nulls REQUIRES either fill_value or method in params
+
+5. replace_values REQUIRES params.mapping OR (params.find AND params.replace)
+
+COMMON MISTAKES TO AVOID:
+- DO NOT set conditions to [] (empty array) for filter/drop operations
+- DO NOT guess column names - use exact names from the data profile
+- DO NOT assume case sensitivity - check actual values in the data
+</critical_validation_rules>
 
 <intent_mapping_rules>
 When the user says... → You should respond with...
