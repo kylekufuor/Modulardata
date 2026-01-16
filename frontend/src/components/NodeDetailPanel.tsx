@@ -78,12 +78,15 @@ export default function NodeDetailPanel({ sessionId, node, onClose, onDataRefres
     setProfileLoading(true)
     try {
       const response = await api.getNodeProfile(sessionId, node.id)
-      // API returns { row_count, column_count, profile: { columns, issues } }
+      console.log('Profile API response:', response)
+      // API returns { row_count, column_count, profile: { row_count, column_count, columns, issues } }
+      // The profile field contains the full DataProfile object
+      const profile = response.profile || {}
       setNodeProfile({
-        row_count: response.row_count,
-        column_count: response.column_count,
-        columns: response.profile?.columns || [],
-        issues: response.profile?.issues || [],
+        row_count: profile.row_count || response.row_count || 0,
+        column_count: profile.column_count || response.column_count || 0,
+        columns: profile.columns || [],
+        issues: profile.issues || [],
       })
     } catch (err) {
       console.error('Failed to load node profile:', err)
@@ -319,7 +322,7 @@ export default function NodeDetailPanel({ sessionId, node, onClose, onDataRefres
               <div className="flex items-center justify-center h-full">
                 <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
               </div>
-            ) : nodeProfile ? (
+            ) : nodeProfile && nodeProfile.columns.length > 0 ? (
               <div className="h-full overflow-auto p-6">
                 {/* Summary Cards */}
                 <div className="grid grid-cols-3 gap-4 mb-6">
@@ -411,8 +414,11 @@ export default function NodeDetailPanel({ sessionId, node, onClose, onDataRefres
                 )}
               </div>
             ) : (
-              <div className="flex items-center justify-center h-full text-gray-400">
-                No profile data available
+              <div className="flex flex-col items-center justify-center h-full text-gray-400 p-6">
+                <p>No profile data available</p>
+                <p className="text-xs mt-2">
+                  {nodeProfile ? `Columns: ${nodeProfile.columns.length}` : 'Profile not loaded'}
+                </p>
               </div>
             )
           )}
