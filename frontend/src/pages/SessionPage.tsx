@@ -249,9 +249,23 @@ export default function SessionPage() {
         <div className="w-96 flex flex-col bg-white border-r border-gray-200">
           {/* Chat Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.length === 0 ? (
-              <div className="text-center text-gray-500 py-8">
-                <p className="mb-4">Upload a CSV file to get started</p>
+            {/* Welcome Message - Always shown first */}
+            <div className="mr-8">
+              <div className="p-3 rounded-lg bg-gray-100 text-gray-900">
+                <p className="text-sm font-medium mb-2">Welcome to ModularData! 👋</p>
+                <p className="text-sm whitespace-pre-wrap">
+                  I'm your data transformation assistant. I help you clean, transform, and prepare your data through natural conversation.
+                </p>
+                {dataNodes.length === 0 && (
+                  <p className="text-sm mt-2 text-gray-600">
+                    Upload a CSV file to get started, and I'll help you explore and clean your data.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {messages.length === 0 && dataNodes.length === 0 ? (
+              <div className="text-center py-4">
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
