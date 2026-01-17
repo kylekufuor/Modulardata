@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ModularData Architecture</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #0a0a0f;
+            --bg-surface: #12121a;
+            --bg-elevated: #1a1a25;
+            --border: #2a2a3a;
+            --text-primary: #e8e8f0;
+            --text-secondary: #8888a0;
+            --text-muted: #555566;
+
+            /* Layer colors */
+            --api-blue: #3b82f6;
+            --api-blue-glow: rgba(59, 130, 246, 0.3);
+            --agent-purple: #a855f7;
+            --agent-purple-glow: rgba(168, 85, 247, 0.3);
+            --engine-emerald: #10b981;
+            --engine-emerald-glow: rgba(16, 185, 129, 0.3);
+            --data-amber: #f59e0b;
+            --data-amber-glow: rgba(245, 158, 11, 0.3);
+            --node-cyan: #06b6d4;
+            --node-cyan-glow: rgba(6, 182, 212, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Subtle grid background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 60px 40px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 80px;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 16px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+        }
+
+        /* Section titles */
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 40px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .section-number {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            background: var(--bg-elevated);
+            padding: 6px 12px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+        }
+
+        .section-title h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        /* Architecture Stack */
+        .arch-section {
+            margin-bottom: 100px;
+        }
+
+        .stack {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .layer {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 32px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .layer::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            border-radius: 12px 0 0 12px;
+        }
+
+        .layer:hover {
+            transform: translateX(8px);
+        }
+
+        .layer-api::before { background: var(--api-blue); }
+        .layer-api:hover { box-shadow: -4px 0 40px var(--api-blue-glow); }
+
+        .layer-agents::before { background: var(--agent-purple); }
+        .layer-agents:hover { box-shadow: -4px 0 40px var(--agent-purple-glow); }
+
+        .layer-engine::before { background: var(--engine-emerald); }
+        .layer-engine:hover { box-shadow: -4px 0 40px var(--engine-emerald-glow); }
+
+        .layer-data::before { background: var(--data-amber); }
+        .layer-data:hover { box-shadow: -4px 0 40px var(--data-amber-glow); }
+
+        .layer-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .layer-name {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .layer-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .layer-api .layer-icon { background: var(--api-blue-glow); color: var(--api-blue); }
+        .layer-agents .layer-icon { background: var(--agent-purple-glow); color: var(--agent-purple); }
+        .layer-engine .layer-icon { background: var(--engine-emerald-glow); color: var(--engine-emerald); }
+        .layer-data .layer-icon { background: var(--data-amber-glow); color: var(--data-amber); }
+
+        .layer-name h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .layer-tag {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            padding: 4px 10px;
+            border-radius: 4px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        .layer-content {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .layer-item {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            padding: 8px 14px;
+            background: var(--bg-deep);
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+        }
+
+        .layer-item:hover {
+            border-color: var(--text-muted);
+            color: var(--text-primary);
+        }
+
+        /* Agents flow */
+        .agents-flow {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .agent-box {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            background: var(--bg-deep);
+            border-radius: 8px;
+            border: 1px solid var(--agent-purple);
+            color: var(--agent-purple);
+            font-weight: 500;
+        }
+
+        .agent-arrow {
+            color: var(--text-muted);
+            font-size: 1.2rem;
+        }
+
+        /* Flow arrows between layers */
+        .flow-connector {
+            display: flex;
+            justify-content: center;
+            padding: 8px 0;
+        }
+
+        .flow-arrow {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .flow-arrow span {
+            margin-top: 4px;
+        }
+
+        /* Module Architecture */
+        .module-section {
+            margin-bottom: 100px;
+        }
+
+        .module-diagram {
+            display: grid;
+            grid-template-columns: 1fr 1.5fr;
+            gap: 40px;
+            align-items: start;
+        }
+
+        .module-visual {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            position: relative;
+        }
+
+        .module-label {
+            position: absolute;
+            top: -12px;
+            left: 24px;
+            background: var(--bg-deep);
+            padding: 4px 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--node-cyan);
+            border: 1px solid var(--node-cyan);
+            border-radius: 4px;
+        }
+
+        .node-chain {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+        }
+
+        .node {
+            width: 100%;
+            max-width: 300px;
+            padding: 20px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .node:hover {
+            border-color: var(--node-cyan);
+            box-shadow: 0 0 30px var(--node-cyan-glow);
+        }
+
+        .node-root {
+            border-color: var(--data-amber);
+        }
+
+        .node-root:hover {
+            border-color: var(--data-amber);
+            box-shadow: 0 0 30px var(--data-amber-glow);
+        }
+
+        .node-deployed {
+            border-color: var(--engine-emerald);
+        }
+
+        .node-deployed:hover {
+            border-color: var(--engine-emerald);
+            box-shadow: 0 0 30px var(--engine-emerald-glow);
+        }
+
+        .node-type {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 8px;
+        }
+
+        .node-root .node-type { color: var(--data-amber); }
+        .node-deployed .node-type { color: var(--engine-emerald); }
+        .node .node-type { color: var(--text-muted); }
+
+        .node-title {
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 12px;
+        }
+
+        .node-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .node-meta span {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            padding: 4px 8px;
+            background: var(--bg-deep);
+            border-radius: 4px;
+            color: var(--text-secondary);
+        }
+
+        .node-connector {
+            width: 2px;
+            height: 24px;
+            background: linear-gradient(to bottom, var(--border), var(--node-cyan-glow));
+        }
+
+        .deployed-badge {
+            position: absolute;
+            right: -60px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--engine-emerald);
+            white-space: nowrap;
+        }
+
+        .deployed-badge::before {
+            content: '';
+            width: 40px;
+            height: 2px;
+            background: linear-gradient(to right, var(--engine-emerald), transparent);
+        }
+
+        /* Module description */
+        .module-description {
+            padding-top: 20px;
+        }
+
+        .module-description h3 {
+            font-size: 1.2rem;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+
+        .module-description p {
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 24px;
+            font-size: 0.95rem;
+        }
+
+        .module-features {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .feature {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 16px;
+            background: var(--bg-surface);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .feature-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+            background: var(--node-cyan-glow);
+            color: var(--node-cyan);
+        }
+
+        .feature-text h4 {
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .feature-text p {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin: 0;
+        }
+
+        /* Primitives Section */
+        .primitives-section {
+            margin-bottom: 60px;
+        }
+
+        .primitives-intro {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        .primitives-text h3 {
+            font-size: 1.3rem;
+            margin-bottom: 16px;
+        }
+
+        .primitives-text p {
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 20px;
+        }
+
+        .stat-box {
+            display: inline-flex;
+            align-items: baseline;
+            gap: 8px;
+            padding: 16px 24px;
+            background: var(--engine-emerald-glow);
+            border: 1px solid var(--engine-emerald);
+            border-radius: 8px;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--engine-emerald);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .primitive-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            padding: 32px;
+            background: var(--bg-surface);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        .flow-box {
+            padding: 16px 24px;
+            background: var(--bg-deep);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+
+        .flow-box.input {
+            border-color: var(--data-amber);
+        }
+
+        .flow-box.primitive {
+            border-color: var(--engine-emerald);
+            background: var(--engine-emerald-glow);
+        }
+
+        .flow-box.output {
+            border-color: var(--node-cyan);
+        }
+
+        .flow-box-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .flow-box-value {
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .flow-box.input .flow-box-value { color: var(--data-amber); }
+        .flow-box.primitive .flow-box-value { color: var(--engine-emerald); }
+        .flow-box.output .flow-box-value { color: var(--node-cyan); }
+
+        .flow-arrow-h {
+            color: var(--text-muted);
+            font-size: 1.5rem;
+        }
+
+        /* Categories grid */
+        .categories-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        .category {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            transition: all 0.3s ease;
+        }
+
+        .category:hover {
+            transform: translateY(-4px);
+            border-color: var(--engine-emerald);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .category-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .category-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--engine-emerald);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .category-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            padding: 4px 8px;
+            background: var(--bg-elevated);
+            border-radius: 4px;
+            color: var(--text-secondary);
+        }
+
+        .category-primitives {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .category-primitives span {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            padding: 6px 10px;
+            background: var(--bg-deep);
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .category-primitives span:hover {
+            color: var(--text-primary);
+            background: var(--bg-elevated);
+        }
+
+        /* Engine section */
+        .engine-section {
+            margin-top: 40px;
+            padding: 32px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+        }
+
+        .engine-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .engine-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--engine-emerald-glow);
+            border: 1px solid var(--engine-emerald);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+        }
+
+        .engine-title h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .engine-title p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .engine-code {
+            background: var(--bg-deep);
+            border-radius: 8px;
+            padding: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            overflow-x: auto;
+        }
+
+        .code-comment { color: var(--text-muted); }
+        .code-key { color: var(--api-blue); }
+        .code-string { color: var(--engine-emerald); }
+        .code-bracket { color: var(--text-secondary); }
+
+        /* Footer */
+        .footer {
+            margin-top: 80px;
+            padding-top: 40px;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        @media (max-width: 1024px) {
+            .module-diagram {
+                grid-template-columns: 1fr;
+            }
+
+            .primitives-intro {
+                grid-template-columns: 1fr;
+            }
+
+            .categories-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 640px) {
+            .categories-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .agents-flow {
+                flex-direction: column;
+            }
+
+            .agent-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>ModularData Architecture</h1>
+            <p>A deterministic data transformation platform with AI-powered intent parsing</p>
+        </header>
+
+        <!-- Section 1: App Architecture -->
+        <section class="arch-section">
+            <div class="section-title">
+                <span class="section-number">01</span>
+                <h2>Application Architecture</h2>
+            </div>
+
+            <div class="stack">
+                <!-- API Layer -->
+                <div class="layer layer-api">
+                    <div class="layer-header">
+                        <div class="layer-name">
+                            <div class="layer-icon">⚡</div>
+                            <h3>API Layer</h3>
+                        </div>
+                        <span class="layer-tag">FastAPI</span>
+                    </div>
+                    <div class="layer-content">
+                        <span class="layer-item">/sessions</span>
+                        <span class="layer-item">/upload</span>
+                        <span class="layer-item">/chat</span>
+                        <span class="layer-item">/plan</span>
+                        <span class="layer-item">/history</span>
+                        <span class="layer-item">/runs</span>
+                        <span class="layer-item">/ws</span>
+                    </div>
+                </div>
+
+                <div class="flow-connector">
+                    <div class="flow-arrow">
+                        ↓
+                        <span>routes to</span>
+                    </div>
+                </div>
+
+                <!-- Intelligence Layer -->
+                <div class="layer layer-agents">
+                    <div class="layer-header">
+                        <div class="layer-name">
+                            <div class="layer-icon">🧠</div>
+                            <h3>Intelligence Layer</h3>
+                        </div>
+                        <span class="layer-tag">3-Agent Pipeline</span>
+                    </div>
+                    <div class="agents-flow">
+                        <div class="agent-box">
+                            <span>🎯</span>
+                            <span>Strategist</span>
+                        </div>
+                        <span class="agent-arrow">→</span>
+                        <div class="agent-box">
+                            <span>⚙️</span>
+                            <span>Engineer</span>
+                        </div>
+                        <span class="agent-arrow">→</span>
+                        <div class="agent-box">
+                            <span>✓</span>
+                            <span>Tester</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flow-connector">
+                    <div class="flow-arrow">
+                        ↓
+                        <span>translates to</span>
+                    </div>
+                </div>
+
+                <!-- Execution Layer -->
+                <div class="layer layer-engine">
+                    <div class="layer-header">
+                        <div class="layer-name">
+                            <div class="layer-icon">⬡</div>
+                            <h3>Execution Layer</h3>
+                        </div>
+                        <span class="layer-tag">transforms_v2</span>
+                    </div>
+                    <div class="layer-content">
+                        <span class="layer-item">Engine</span>
+                        <span class="layer-item">Registry</span>
+                        <span class="layer-item">85 Primitives</span>
+                        <span class="layer-item">PlanTranslator</span>
+                        <span class="layer-item">Validation</span>
+                    </div>
+                </div>
+
+                <div class="flow-connector">
+                    <div class="flow-arrow">
+                        ↓
+                        <span>persists to</span>
+                    </div>
+                </div>
+
+                <!-- Data Layer -->
+                <div class="layer layer-data">
+                    <div class="layer-header">
+                        <div class="layer-name">
+                            <div class="layer-icon">◉</div>
+                            <h3>Data Layer</h3>
+                        </div>
+                        <span class="layer-tag">Supabase</span>
+                    </div>
+                    <div class="layer-content">
+                        <span class="layer-item">sessions</span>
+                        <span class="layer-item">nodes</span>
+                        <span class="layer-item">session_plans</span>
+                        <span class="layer-item">module_runs</span>
+                        <span class="layer-item">CSV Storage</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: Module Architecture -->
+        <section class="module-section">
+            <div class="section-title">
+                <span class="section-number">02</span>
+                <h2>Module Architecture</h2>
+            </div>
+
+            <div class="module-diagram">
+                <div class="module-visual">
+                    <span class="module-label">MODULE</span>
+
+                    <div class="node-chain">
+                        <div class="node node-root">
+                            <div class="node-type">Root Node</div>
+                            <div class="node-title">Original Data</div>
+                            <div class="node-meta">
+                                <span>schema</span>
+                                <span>profile</span>
+                                <span>1,000 rows</span>
+                            </div>
+                        </div>
+
+                        <div class="node-connector"></div>
+
+                        <div class="node">
+                            <div class="node-type">Transform 1</div>
+                            <div class="node-title">Remove nulls from email</div>
+                            <div class="node-meta">
+                                <span>filter_rows</span>
+                                <span>950 rows</span>
+                            </div>
+                        </div>
+
+                        <div class="node-connector"></div>
+
+                        <div class="node">
+                            <div class="node-type">Transform 2</div>
+                            <div class="node-title">Standardize phone format</div>
+                            <div class="node-meta">
+                                <span>regex_replace</span>
+                                <span>950 rows</span>
+                            </div>
+                        </div>
+
+                        <div class="node-connector"></div>
+
+                        <div class="node node-deployed">
+                            <div class="node-type">Transform 3</div>
+                            <div class="node-title">Add lead_score column</div>
+                            <div class="node-meta">
+                                <span>add_column</span>
+                                <span>calculate</span>
+                            </div>
+                            <div class="deployed-badge">deployed_node_id</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="module-description">
+                    <h3>What is a Module?</h3>
+                    <p>
+                        A Module is a reusable transformation pipeline. It captures the complete
+                        chain of transformations from original data to final output, allowing
+                        the same logic to be applied to new data files.
+                    </p>
+
+                    <div class="module-features">
+                        <div class="feature">
+                            <div class="feature-icon">📋</div>
+                            <div class="feature-text">
+                                <h4>Schema Contract</h4>
+                                <p>Root node defines expected input schema. New data is matched against this contract.</p>
+                            </div>
+                        </div>
+                        <div class="feature">
+                            <div class="feature-icon">🔗</div>
+                            <div class="feature-text">
+                                <h4>Node Chain</h4>
+                                <p>Each node stores: transformation code, data snapshot, profile, and parent reference.</p>
+                            </div>
+                        </div>
+                        <div class="feature">
+                            <div class="feature-icon">🚀</div>
+                            <div class="feature-text">
+                                <h4>Deploy & Run</h4>
+                                <p>deployed_node_id marks the production version. POST /run replays all transformations.</p>
+                            </div>
+                        </div>
+                        <div class="feature">
+                            <div class="feature-icon">↩️</div>
+                            <div class="feature-text">
+                                <h4>Version Control</h4>
+                                <p>Tree structure enables branching and rollback. All versions preserved.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Primitives -->
+        <section class="primitives-section">
+            <div class="section-title">
+                <span class="section-number">03</span>
+                <h2>Primitives — The Atomic Layer</h2>
+            </div>
+
+            <div class="primitives-intro">
+                <div class="primitives-text">
+                    <h3>Deterministic Building Blocks</h3>
+                    <p>
+                        Primitives are the foundation of all transformations. Each primitive is a
+                        single, atomic operation with defined inputs and outputs. No dynamic code
+                        generation — every operation comes from the registered primitive library.
+                    </p>
+                    <div class="stat-box">
+                        <span class="stat-number">85</span>
+                        <span class="stat-label">Primitives</span>
+                    </div>
+                </div>
+
+                <div class="primitive-flow">
+                    <div class="flow-box input">
+                        <div class="flow-box-label">Input</div>
+                        <div class="flow-box-value">DataFrame</div>
+                    </div>
+                    <span class="flow-arrow-h">→</span>
+                    <div class="flow-box primitive">
+                        <div class="flow-box-label">Primitive</div>
+                        <div class="flow-box-value">filter_rows</div>
+                    </div>
+                    <span class="flow-arrow-h">→</span>
+                    <div class="flow-box output">
+                        <div class="flow-box-label">Output</div>
+                        <div class="flow-box-value">DataFrame</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="categories-grid">
+                <div class="category">
+                    <div class="category-header">
+                        <span class="category-name">Rows</span>
+                        <span class="category-count">6</span>
+                    </div>
+                    <div class="category-primitives">
+                        <span>filter_rows</span>
+                        <span>sort_rows</span>
+                        <span>remove_duplicates</span>
+                        <span>limit_rows</span>
+                    </div>
+                </div>
+
+                <div class="category">
+                    <div class="category-header">
+                        <span class="category-name">Columns</span>
+                        <span class="category-count">8</span>
+                    </div>
+                    <div class="category-primitives">
+                        <span>select_columns</span>
+                        <span>rename_columns</span>
+                        <span>add_column</span>
+                        <span>split_column</span>
+                    </div>
+                </div>
+
+                <div class="category">
+                    <div class="category-header">
+                        <span class="category-name">Text</span>
+                        <span class="category-count">10</span>
+                    </div>
+                    <div class="category-primitives">
+                        <span>find_replace</span>
+                        <span>regex_extract</span>
+                        <span>change_text_casing</span>
+                        <span>trim_whitespace</span>
+                    </div>
+                </div>
+
+                <div class="category">
+                    <div class="category-header">
+                        <span class="category-name">Calculate</span>
+                        <span class="category-count">12</span>
+                    </div>
+                    <div class="category-primitives">
+                        <span>math_operation</span>
+                        <span>round_numbers</span>
+                        <span>running_total</span>
+                        <span>rank</span>
+                    </div>
+                </div>
+
+                <div class="category">
+                    <div class="category-header">
+                        <span class="category-name">Dates</span>
+                        <span class="category-count">8</span>
+                    </div>
+                    <div class="category-primitives">
+                        <span>format_date</span>
+                        <span>extract_date_parts</span>
+                        <span>date_difference</span>
+                        <span>add_date_interval</span>
+                    </div>
+                </div>
+
+                <div class="category">
+                    <div class="category-header">
+                        <span class="category-name">Tables</span>
+                        <span class="category-count">6</span>
+                    </div>
+                    <div class="category-primitives">
+                        <span>join_tables</span>
+                        <span>union_tables</span>
+                        <span>lookup</span>
+                        <span>cross_join</span>
+                    </div>
+                </div>
+
+                <div class="category">
+                    <div class="category-header">
+                        <span class="category-name">Groups</span>
+                        <span class="category-count">6</span>
+                    </div>
+                    <div class="category-primitives">
+                        <span>aggregate</span>
+                        <span>pivot</span>
+                        <span>unpivot</span>
+                        <span>group_by</span>
+                    </div>
+                </div>
+
+                <div class="category">
+                    <div class="category-header">
+                        <span class="category-name">Quality</span>
+                        <span class="category-count">15+</span>
+                    </div>
+                    <div class="category-primitives">
+                        <span>detect_nulls</span>
+                        <span>detect_outliers</span>
+                        <span>validate_schema</span>
+                        <span>detect_drift</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Engine -->
+            <div class="engine-section">
+                <div class="engine-header">
+                    <div class="engine-icon">⚙️</div>
+                    <div class="engine-title">
+                        <h3>Engine Execution</h3>
+                        <p>Plans are arrays of primitive calls executed sequentially</p>
+                    </div>
+                </div>
+
+                <div class="engine-code">
+<span class="code-comment"># Plan: Array of primitive operations</span>
+plan = <span class="code-bracket">[</span>
+    <span class="code-bracket">{</span><span class="code-key">"op"</span>: <span class="code-string">"filter_rows"</span>, <span class="code-key">"params"</span>: <span class="code-bracket">{</span><span class="code-key">"column"</span>: <span class="code-string">"email"</span>, <span class="code-key">"operator"</span>: <span class="code-string">"is_not_null"</span><span class="code-bracket">}}</span>,
+    <span class="code-bracket">{</span><span class="code-key">"op"</span>: <span class="code-string">"remove_duplicates"</span>, <span class="code-key">"params"</span>: <span class="code-bracket">{</span><span class="code-key">"subset"</span>: <span class="code-bracket">[</span><span class="code-string">"email"</span><span class="code-bracket">]</span><span class="code-bracket">}}</span>,
+    <span class="code-bracket">{</span><span class="code-key">"op"</span>: <span class="code-string">"change_text_casing"</span>, <span class="code-key">"params"</span>: <span class="code-bracket">{</span><span class="code-key">"column"</span>: <span class="code-string">"name"</span>, <span class="code-key">"case"</span>: <span class="code-string">"title"</span><span class="code-bracket">}}</span>
+<span class="code-bracket">]</span>
+
+<span class="code-comment"># Engine executes each step, tracks results</span>
+result = Engine().execute(df, plan)
+<span class="code-comment"># → ExecutionResult(success=True, df=..., steps=[...], total_duration_ms=42)</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            ModularData Architecture Diagram • Generated 2026
+        </footer>
+    </div>
+</body>
+</html>

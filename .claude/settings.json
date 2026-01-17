@@ -1,6 +1,6 @@
 {
   "hooks": {
-    "stop": [
+    "Stop": [
       {
         "command": "./scripts/ralph-stop-hook.sh",
         "description": "Ralph loop stop hook - blocks exit until completion promise found"
