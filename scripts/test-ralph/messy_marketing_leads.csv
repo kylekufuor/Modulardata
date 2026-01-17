@@ -1,0 +1,13 @@
+lead_id,first_name,last_name,email,phone_number,company,campaign_source,lead_score,created_date,status
+1001,JOHN,SMITH,JOHN.SMITH@ACME.COM,(555) 123-4567,Acme Corp,google ads,85,01/15/2024,Contacted
+1002,jane,doe,jane.doe@techstart.io,555.234.5678,TechStart Inc,LinkedIn,92,2024-01-16,Qualifed
+1003,MICHAEL,Williams,m.williams@globex.net,5553456789,Globex Ltd,Google Ads,seventy-two,Jan 17 2024,NEW
+1004,Emily,JOHNSON,emily.j@startup.co,555-456-7890,StartUp Co,linkedin,68,24/01/2024,contacted
+1005,david,Lee,DAVID.LEE@BIGCORP.COM,+1 555 567 8901,BigCorp,google ads,91,2024-01-19,QUALIFIED
+1006,SARAH,brown,sarah.b@innovate.io,(555)678-9012,Innovate LLC,LinkedIn,55,01/20/2024,New
+1007,Chris,MARTINEZ,chris.m@enterprise.com,555 789 0123,Enterprise Inc,Google Ads,seventy-two,2024-01-21,Contacted
+1008,amanda,Wilson,AMANDA.W@SOLUTIONS.NET,5558901234,Solutions Co,linkedin,fifty-five,Jan 22 2024,qualified
+1003,MICHAEL,Williams,m.williams@globex.net,5553456789,Globex Ltd,Google Ads,seventy-two,Jan 17 2024,NEW
+1010,Robert,Taylor,robert.t@dynamics.com,(555) 012-3456,Dynamics Inc,google ads,78,2024-01-24,New
+1011,jennifer,GARCIA,jen.garcia@vertex.io,5553456789,Vertex Corp,LinkedIn,63,01/25/2024,
+1012,THOMAS,anderson,thomas.a@matrix.net,,Matrix LLC,Google Ads,,2024-01-26,Contacted
