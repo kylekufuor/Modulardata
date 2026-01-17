@@ -4,15 +4,16 @@ import AuthPage from './pages/AuthPage'
 import DashboardPage from './pages/DashboardPage'
 import NewModulePage from './pages/NewModulePage'
 import SessionPage from './pages/SessionPage'
-import { Loader2 } from 'lucide-react'
+import LoaderDemoPage from './pages/LoaderDemoPage'
+import { ModularLoader } from './components/ModularLoader'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f]">
+        <ModularLoader preset="appLaunch" size="lg" />
       </div>
     )
   }
@@ -29,14 +30,16 @@ function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f]">
+        <ModularLoader preset="appLaunch" size="lg" />
       </div>
     )
   }
 
   return (
     <Routes>
+      {/* Development route for loader demo */}
+      <Route path="/demo/loaders" element={<LoaderDemoPage />} />
       <Route
         path="/auth"
         element={user ? <Navigate to="/dashboard" replace /> : <AuthPage />}
