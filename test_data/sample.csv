@@ -1,0 +1,13 @@
+id,name,email,phone,amount,date,status,category,notes
+1,  JOHN DOE  ,JOHN.DOE@EMAIL.COM,(555) 123-4567,1250.50,01/15/2024,active,Electronics,Great customer
+2,jane smith,jane@company.org,555.234.5678,890.00,2024-01-16,Active,electronics,Repeat buyer
+3,BOB WILSON,bob.w@test.net,5553456789,2100.75,January 17 2024,ACTIVE,Home & Garden,
+4,Alice Brown,alice@gmail.com,555-456-7890,450.25,01/18/24,pending,Electronics,New customer
+5,  charlie davis,CHARLIE@MAIL.COM,+1 555 567 8901,3200.00,2024-01-19,Pending,home & garden,VIP client
+6,EMMA JONES,,555 678 9012,780.50,Jan 20 2024,inactive,ELECTRONICS,Needs follow-up
+7,frank miller,frank.m@email.com,(555)789-0123,1500.00,01-21-2024,INACTIVE,Clothing,
+8,Grace Lee,GRACE@COMPANY.ORG,5558901234,920.30,2024/01/22,Active,clothing,Referred by Bob
+9,  HENRY TAYLOR  ,henry.t@test.net,555 012 3456,2800.00,"January 23, 2024",pending,Home & Garden,Large order
+10,ivy chen,IVY.CHEN@GMAIL.COM,(555) 123-7890,650.00,01/24/2024,active,electronics,
+11,JACK SMITH,jack@email.com,555.234.8901,1100.25,2024-01-25,,Clothing,Status unknown
+12,kate wilson,,5553459012,4500.00,Jan 26 2024,Active,HOME & GARDEN,  Premium customer
