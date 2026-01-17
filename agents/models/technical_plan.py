@@ -219,6 +219,9 @@ class TransformationType(str, Enum):
     VALIDATE_FORMAT = "validate_format"
     """Check if values match a pattern (email, phone, etc.) and flag invalid."""
 
+    FORMAT_PHONE = "format_phone"
+    """Standardize phone numbers to a consistent format (e.g., nnn-nnn-nnnn)."""
+
     MASK_DATA = "mask_data"
     """Mask sensitive data (show only last N characters, etc.)."""
 
@@ -343,6 +346,60 @@ class ColumnTarget(BaseModel):
     )
 
 
+class AcceptanceCriterion(BaseModel):
+    """
+    A single acceptance criterion for validating transformation results.
+
+    The Strategist defines these criteria to specify what the outcome should look like.
+    The Tester validates these criteria after the Engineer executes the transformation.
+
+    Supported criterion types:
+    - column_format: Values in column should match a regex pattern
+    - value_changed: Column values should be different from before
+    - row_count_change: Expected change in row count (exact, min, max, or percentage)
+    - column_exists: A column should exist (or not exist) after transformation
+    - no_nulls: Column should have no null values
+    - unique_values: Column should have unique values (no duplicates)
+    """
+
+    type: str = Field(
+        ...,
+        description="Type of criterion: column_format, value_changed, row_count_change, column_exists, no_nulls, unique_values"
+    )
+
+    column: str | None = Field(
+        default=None,
+        description="Column to check (required for most criterion types)"
+    )
+
+    pattern: str | None = Field(
+        default=None,
+        description="Regex pattern for column_format criterion"
+    )
+
+    min_match_rate: float = Field(
+        default=0.9,
+        ge=0.0,
+        le=1.0,
+        description="Minimum percentage of values that should match (for column_format)"
+    )
+
+    expected_change: str | None = Field(
+        default=None,
+        description="For row_count_change: 'increase', 'decrease', 'same', or specific like '-10%', '>0', '<100'"
+    )
+
+    should_exist: bool = Field(
+        default=True,
+        description="For column_exists: whether column should exist (True) or not (False)"
+    )
+
+    description: str = Field(
+        ...,
+        description="Human-readable description of what this criterion validates"
+    )
+
+
 class FilterCondition(BaseModel):
     """
     Condition for filtering/dropping rows.
@@ -460,6 +517,11 @@ class TechnicalPlan(BaseModel):
     parameters: dict[str, Any] = Field(
         default_factory=dict,
         description="Type-specific parameters (fill_value, case_type, etc.)"
+    )
+
+    acceptance_criteria: list[AcceptanceCriterion] = Field(
+        default_factory=list,
+        description="Criteria the Tester should validate after transformation"
     )
 
     # -------------------------------------------------------------------------

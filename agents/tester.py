@@ -28,7 +28,7 @@ from typing import Any
 
 import pandas as pd
 
-from agents.models.technical_plan import TechnicalPlan, TransformationType
+from agents.models.technical_plan import TechnicalPlan, TransformationType, AcceptanceCriterion
 from agents.models.test_result import (
     TestResult,
     CheckResult,
@@ -197,6 +197,30 @@ class TesterAgent:
                 ))
                 checks_failed.append(check_name)
 
+        # Validate acceptance criteria from the Strategist
+        if plan.acceptance_criteria:
+            logger.info(f"Validating {len(plan.acceptance_criteria)} acceptance criteria")
+            acceptance_issues = self._validate_acceptance_criteria(before_df, after_df, plan)
+
+            if acceptance_issues:
+                check_results.append(CheckResult(
+                    check_name="acceptance_criteria",
+                    passed=not any(i.severity == Severity.ERROR for i in acceptance_issues),
+                    issues=acceptance_issues,
+                    execution_time_ms=0
+                ))
+
+                # Add to overall issues
+                all_issues.extend(acceptance_issues)
+
+                # Track pass/fail
+                if any(i.severity == Severity.ERROR for i in acceptance_issues):
+                    checks_failed.append("acceptance_criteria")
+                else:
+                    checks_passed.append("acceptance_criteria")
+            else:
+                checks_passed.append("acceptance_criteria")
+
         # Calculate statistics
         rows_before = len(before_df)
         rows_after = len(after_df)
@@ -298,6 +322,290 @@ class TesterAgent:
             self.validate(before_df, after_df, plan)
             for before_df, after_df, plan in transformations
         ]
+
+    # -------------------------------------------------------------------------
+    # Acceptance Criteria Validation
+    # -------------------------------------------------------------------------
+
+    def _validate_acceptance_criteria(
+        self,
+        before_df: pd.DataFrame,
+        after_df: pd.DataFrame,
+        plan: TechnicalPlan,
+    ) -> list[QualityIssue]:
+        """
+        Validate acceptance criteria defined by the Strategist.
+
+        This is the key integration between Strategist intent and Tester validation.
+        Each criterion describes what the transformation should achieve.
+        """
+        import re
+        issues = []
+
+        for criterion in plan.acceptance_criteria:
+            try:
+                criterion_issues = self._validate_single_criterion(
+                    before_df, after_df, criterion
+                )
+                issues.extend(criterion_issues)
+            except Exception as e:
+                logger.error(f"Failed to validate criterion {criterion.type}: {e}")
+                issues.append(QualityIssue(
+                    check_name="acceptance_criteria",
+                    severity=Severity.WARNING,
+                    message=f"Could not validate criterion: {criterion.description}",
+                    details={"error": str(e), "criterion_type": criterion.type}
+                ))
+
+        return issues
+
+    def _validate_single_criterion(
+        self,
+        before_df: pd.DataFrame,
+        after_df: pd.DataFrame,
+        criterion: AcceptanceCriterion,
+    ) -> list[QualityIssue]:
+        """Validate a single acceptance criterion."""
+        import re
+        issues = []
+
+        if criterion.type == "column_format":
+            issues.extend(self._check_column_format(after_df, criterion))
+
+        elif criterion.type == "value_changed":
+            issues.extend(self._check_value_changed(before_df, after_df, criterion))
+
+        elif criterion.type == "row_count_change":
+            issues.extend(self._check_row_count_change(before_df, after_df, criterion))
+
+        elif criterion.type == "column_exists":
+            issues.extend(self._check_column_exists(after_df, criterion))
+
+        elif criterion.type == "no_nulls":
+            issues.extend(self._check_no_nulls(after_df, criterion))
+
+        elif criterion.type == "unique_values":
+            issues.extend(self._check_unique_values(after_df, criterion))
+
+        return issues
+
+    def _check_column_format(
+        self,
+        after_df: pd.DataFrame,
+        criterion: AcceptanceCriterion,
+    ) -> list[QualityIssue]:
+        """Check if column values match expected regex pattern."""
+        import re
+        issues = []
+        col = criterion.column
+
+        if not col or col not in after_df.columns:
+            return issues
+
+        pattern = criterion.pattern
+        if not pattern:
+            return issues
+
+        col_data = after_df[col].dropna().astype(str)
+        if len(col_data) == 0:
+            return issues
+
+        matches = col_data.str.match(pattern, na=False)
+        match_rate = matches.sum() / len(col_data)
+
+        if match_rate < criterion.min_match_rate:
+            sample_non_matching = col_data[~matches].head(3).tolist()
+            issues.append(QualityIssue(
+                check_name="acceptance_criteria",
+                severity=Severity.ERROR,
+                column=col,
+                message=f"ACCEPTANCE CRITERION FAILED: {criterion.description}. Only {match_rate:.0%} of values match expected format (need {criterion.min_match_rate:.0%})",
+                details={
+                    "criterion_type": "column_format",
+                    "expected_pattern": pattern,
+                    "match_rate": float(match_rate),
+                    "required_rate": criterion.min_match_rate,
+                    "sample_non_matching": sample_non_matching
+                },
+                suggestion="The transformation may not have achieved the intended result. Consider retrying with different parameters."
+            ))
+
+        return issues
+
+    def _check_value_changed(
+        self,
+        before_df: pd.DataFrame,
+        after_df: pd.DataFrame,
+        criterion: AcceptanceCriterion,
+    ) -> list[QualityIssue]:
+        """Check if column values actually changed."""
+        issues = []
+        col = criterion.column
+
+        if not col:
+            return issues
+
+        if col not in before_df.columns or col not in after_df.columns:
+            return issues
+
+        # Compare values (handling potential length differences)
+        try:
+            before_vals = before_df[col].astype(str).tolist()
+            after_vals = after_df[col].astype(str).tolist()
+
+            # Count changes
+            min_len = min(len(before_vals), len(after_vals))
+            changes = sum(1 for i in range(min_len) if before_vals[i] != after_vals[i])
+
+            if changes == 0:
+                issues.append(QualityIssue(
+                    check_name="acceptance_criteria",
+                    severity=Severity.ERROR,
+                    column=col,
+                    message=f"ACCEPTANCE CRITERION FAILED: {criterion.description}. No values in '{col}' were changed by the transformation.",
+                    details={
+                        "criterion_type": "value_changed",
+                        "changes_made": 0
+                    },
+                    suggestion="The transformation did not modify any values. Check if the transformation type is correct."
+                ))
+        except Exception:
+            pass
+
+        return issues
+
+    def _check_row_count_change(
+        self,
+        before_df: pd.DataFrame,
+        after_df: pd.DataFrame,
+        criterion: AcceptanceCriterion,
+    ) -> list[QualityIssue]:
+        """Check if row count changed as expected."""
+        issues = []
+        expected = criterion.expected_change
+
+        if not expected:
+            return issues
+
+        before_count = len(before_df)
+        after_count = len(after_df)
+        change = after_count - before_count
+        change_pct = (change / before_count * 100) if before_count > 0 else 0
+
+        failed = False
+        if expected == "increase" and change <= 0:
+            failed = True
+        elif expected == "decrease" and change >= 0:
+            failed = True
+        elif expected == "same" and change != 0:
+            failed = True
+
+        if failed:
+            issues.append(QualityIssue(
+                check_name="acceptance_criteria",
+                severity=Severity.ERROR,
+                message=f"ACCEPTANCE CRITERION FAILED: {criterion.description}. Expected row count to {expected}, but changed by {change:+d} ({change_pct:+.1f}%)",
+                details={
+                    "criterion_type": "row_count_change",
+                    "expected_change": expected,
+                    "actual_change": change,
+                    "before_count": before_count,
+                    "after_count": after_count
+                }
+            ))
+
+        return issues
+
+    def _check_column_exists(
+        self,
+        after_df: pd.DataFrame,
+        criterion: AcceptanceCriterion,
+    ) -> list[QualityIssue]:
+        """Check if column exists (or doesn't exist)."""
+        issues = []
+        col = criterion.column
+
+        if not col:
+            return issues
+
+        exists = col in after_df.columns
+
+        if criterion.should_exist and not exists:
+            issues.append(QualityIssue(
+                check_name="acceptance_criteria",
+                severity=Severity.ERROR,
+                column=col,
+                message=f"ACCEPTANCE CRITERION FAILED: {criterion.description}. Column '{col}' should exist but was not found.",
+                details={"criterion_type": "column_exists", "should_exist": True}
+            ))
+        elif not criterion.should_exist and exists:
+            issues.append(QualityIssue(
+                check_name="acceptance_criteria",
+                severity=Severity.ERROR,
+                column=col,
+                message=f"ACCEPTANCE CRITERION FAILED: {criterion.description}. Column '{col}' should not exist but was found.",
+                details={"criterion_type": "column_exists", "should_exist": False}
+            ))
+
+        return issues
+
+    def _check_no_nulls(
+        self,
+        after_df: pd.DataFrame,
+        criterion: AcceptanceCriterion,
+    ) -> list[QualityIssue]:
+        """Check if column has no null values."""
+        issues = []
+        col = criterion.column
+
+        if not col or col not in after_df.columns:
+            return issues
+
+        null_count = after_df[col].isna().sum()
+
+        if null_count > 0:
+            issues.append(QualityIssue(
+                check_name="acceptance_criteria",
+                severity=Severity.ERROR,
+                column=col,
+                message=f"ACCEPTANCE CRITERION FAILED: {criterion.description}. Column '{col}' still has {null_count} null values.",
+                details={
+                    "criterion_type": "no_nulls",
+                    "null_count": int(null_count)
+                }
+            ))
+
+        return issues
+
+    def _check_unique_values(
+        self,
+        after_df: pd.DataFrame,
+        criterion: AcceptanceCriterion,
+    ) -> list[QualityIssue]:
+        """Check if column has unique values (no duplicates)."""
+        issues = []
+        col = criterion.column
+
+        if not col or col not in after_df.columns:
+            return issues
+
+        total = len(after_df[col].dropna())
+        unique = after_df[col].dropna().nunique()
+        duplicates = total - unique
+
+        if duplicates > 0:
+            issues.append(QualityIssue(
+                check_name="acceptance_criteria",
+                severity=Severity.ERROR,
+                column=col,
+                message=f"ACCEPTANCE CRITERION FAILED: {criterion.description}. Column '{col}' has {duplicates} duplicate values.",
+                details={
+                    "criterion_type": "unique_values",
+                    "duplicate_count": duplicates
+                }
+            ))
+
+        return issues
 
     # -------------------------------------------------------------------------
     # Helpers

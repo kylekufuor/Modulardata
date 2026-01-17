@@ -93,6 +93,83 @@ def validate_format(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame
     return result, code
 
 
+@register(TransformationType.FORMAT_PHONE)
+def format_phone(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame, str]:
+    """
+    Standardize phone numbers to a consistent format.
+
+    Parameters (from plan.parameters):
+        output_format: Target format string using placeholders:
+                      "nnn-nnn-nnnn" (default), "(nnn) nnn-nnnn", "nnn.nnn.nnnn",
+                      "nnnnnnnnnn" (digits only), "+1-nnn-nnn-nnnn"
+        country_code: Optional country code to prepend (e.g., "1", "+1")
+        target_columns: Columns to format
+
+    Example:
+        Various inputs -> "555-123-4567" (with format "nnn-nnn-nnnn"):
+        - "(555) 123-4567"
+        - "555.123.4567"
+        - "5551234567"
+        - "+1 555 123 4567"
+        - "555-123-4567"
+    """
+    columns = plan.get_target_column_names()
+    output_format = plan.parameters.get("output_format", "nnn-nnn-nnnn")
+    country_code = plan.parameters.get("country_code")
+
+    result = df.copy()
+    code_parts = []
+
+    def format_phone_number(val):
+        """Extract digits and reformat phone number."""
+        if pd.isna(val):
+            return val
+
+        # Convert to string and extract only digits
+        s = str(val)
+        digits = re.sub(r'\D', '', s)
+
+        # Handle country code (remove leading 1 if present for US numbers)
+        if len(digits) == 11 and digits.startswith('1'):
+            digits = digits[1:]
+
+        # If we don't have exactly 10 digits, return original
+        # (this handles international or malformed numbers)
+        if len(digits) != 10:
+            return val
+
+        # Format based on output_format
+        if output_format == "nnn-nnn-nnnn":
+            formatted = f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
+        elif output_format == "(nnn) nnn-nnnn":
+            formatted = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+        elif output_format == "nnn.nnn.nnnn":
+            formatted = f"{digits[:3]}.{digits[3:6]}.{digits[6:]}"
+        elif output_format == "nnnnnnnnnn":
+            formatted = digits
+        elif output_format == "+1-nnn-nnn-nnnn":
+            formatted = f"+1-{digits[:3]}-{digits[3:6]}-{digits[6:]}"
+        else:
+            # Default fallback
+            formatted = f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
+
+        # Add country code if specified
+        if country_code and not output_format.startswith("+"):
+            formatted = f"{country_code}-{formatted}"
+
+        return formatted
+
+    for col in columns:
+        if col not in result.columns:
+            continue
+
+        result[col] = result[col].apply(format_phone_number)
+        code_parts.append(f"df['{col}'] = df['{col}'].apply(format_phone_number)  # Extracts digits, formats as {output_format}")
+
+    code = "\n".join(code_parts)
+    return result, code
+
+
 @register(TransformationType.MASK_DATA)
 def mask_data(df: pd.DataFrame, plan: TechnicalPlan) -> tuple[pd.DataFrame, str]:
     """

@@ -141,14 +141,51 @@ agents/
 **Agent Pipeline:**
 
 ```
-User Message → Strategist AI → Technical Plan → Risk Assessment → Engineer → Transformed Data
-                    │                                 │                            │
-                    └── Uses: column names,           │                            │
-                              data types,             ▼                            │
-                              sample values,    [If risky]                        │
-                              prior context     Confirmation                       │
-                                                  Required                         ▼
-                                                                            New Node Created
+User Message → Strategist AI → Technical Plan + Acceptance Criteria
+                    │                    │
+                    └── Uses: column     │
+                        names, data      ▼
+                        types, values   Risk Assessment
+                                               │
+                                         [If risky]
+                                         Confirmation
+                                         Required
+                                               │
+                                               ▼
+                                         Engineer → Transformed Data
+                                               │
+                                               ▼
+                                         Tester → Validates:
+                                               │   1. Data quality checks
+                                               │   2. Acceptance criteria ← Intent validation
+                                               │
+                                         [If criteria fail]
+                                         Transformation marked as failed
+                                               │
+                                               ▼
+                                         New Node Created
+```
+
+**Acceptance Criteria Flow:**
+
+The Strategist defines acceptance criteria that describe what the transformation should achieve.
+The Tester validates these criteria after execution to ensure the user's intent was met.
+
+```
+Strategist: "User wants phone numbers as nnn-nnn-nnnn"
+    │
+    ├── transformation_type: format_phone
+    │
+    └── acceptance_criteria:
+        ├── column_format: phone_number matches ^\d{3}-\d{3}-\d{4}$
+        └── value_changed: phone_number values should be different
+
+Engineer: Executes transformation
+
+Tester: Validates acceptance criteria
+    │
+    ├── If criteria pass → Success
+    └── If criteria fail → Error (transformation didn't achieve intent)
 ```
 
 **Risk Assessment:**

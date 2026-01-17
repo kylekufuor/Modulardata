@@ -101,11 +101,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Column-level change tracking
 - **Clickable INPUT**: Navigate to parent node from Summary tab
 
+#### Acceptance Criteria System
+- **Intent Validation**: Strategist now defines acceptance criteria for each transformation
+  - Tester validates that transformations achieve user's actual intent
+  - Catches cases where wrong transformation type was used
+  - Supports validation types: column_format, value_changed, row_count_change, column_exists, no_nulls, unique_values
+  - Example: Phone formatting now validates output matches `nnn-nnn-nnnn` pattern
+
+#### New Transformation
+- **Phone Formatting**: `format_phone` transformation to standardize phone numbers
+  - Extracts digits from any format (parentheses, dots, dashes, spaces)
+  - Reformats to consistent output format (e.g., `nnn-nnn-nnnn`)
+  - Supports multiple output formats: `nnn-nnn-nnnn`, `(nnn) nnn-nnnn`, `nnn.nnn.nnnn`, etc.
+
 ### Fixed
 - **Filter Validation**: Filters now require at least one condition
   - Previously could generate `df = df[True]` which did nothing
   - Added quality check to warn when filter doesn't actually filter
 - **Strategist Prompt**: Added critical validation rules requiring conditions for filter/drop operations
+- **Phone Number Standardization**: Fixed Strategist using wrong transformation (standardize) for phone formatting requests
 
 ---
 

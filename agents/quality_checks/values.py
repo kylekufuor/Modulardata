@@ -181,6 +181,97 @@ def check_sort_order_valid(
 
 
 @register_check(
+    "phone_format_valid",
+    applies_to=["format_phone"]
+)
+def check_phone_format_valid(
+    before_df: pd.DataFrame,
+    after_df: pd.DataFrame,
+    plan: TechnicalPlan
+) -> list[QualityIssue]:
+    """
+    Verify that phone formatting actually changed the values to the expected format.
+    """
+    import re
+    issues = []
+
+    target_cols = plan.get_target_column_names()
+    output_format = plan.parameters.get("output_format", "nnn-nnn-nnnn")
+
+    # Define expected patterns for each format
+    format_patterns = {
+        "nnn-nnn-nnnn": r'^\d{3}-\d{3}-\d{4}$',
+        "(nnn) nnn-nnnn": r'^\(\d{3}\) \d{3}-\d{4}$',
+        "nnn.nnn.nnnn": r'^\d{3}\.\d{3}\.\d{4}$',
+        "nnnnnnnnnn": r'^\d{10}$',
+        "+1-nnn-nnn-nnnn": r'^\+1-\d{3}-\d{3}-\d{4}$',
+    }
+
+    expected_pattern = format_patterns.get(output_format, r'^\d{3}-\d{3}-\d{4}$')
+
+    for col in target_cols:
+        if col not in after_df.columns:
+            continue
+
+        # Count how many values match the expected format
+        col_data = after_df[col].dropna().astype(str)
+        if len(col_data) == 0:
+            continue
+
+        matches = col_data.str.match(expected_pattern, na=False)
+        match_count = matches.sum()
+        total_count = len(col_data)
+        match_rate = match_count / total_count if total_count > 0 else 0
+
+        # Check if before was different from after (something actually changed)
+        if col in before_df.columns:
+            before_data = before_df[col].dropna().astype(str)
+            before_matches = before_data.str.match(expected_pattern, na=False).sum()
+            changes_made = match_count - before_matches
+        else:
+            changes_made = match_count
+
+        if match_rate < 0.5:
+            # Less than 50% match the expected format - this is a problem
+            sample_bad = col_data[~matches].head(3).tolist()
+            issues.append(QualityIssue(
+                check_name="phone_format_valid",
+                severity=Severity.ERROR,
+                column=col,
+                message=f"Only {match_rate:.0%} of phone numbers match the expected format '{output_format}'",
+                details={
+                    "expected_format": output_format,
+                    "match_rate": float(match_rate),
+                    "sample_non_matching": sample_bad
+                },
+                suggestion="Some phone numbers may have invalid formats that couldn't be standardized."
+            ))
+        elif changes_made == 0:
+            # No changes were made at all
+            issues.append(QualityIssue(
+                check_name="phone_format_valid",
+                severity=Severity.WARNING,
+                column=col,
+                message=f"Phone formatting made no changes to '{col}' - values may already be in the target format or couldn't be parsed",
+                details={"expected_format": output_format}
+            ))
+        elif match_rate < 0.9:
+            # 50-90% match - warning
+            issues.append(QualityIssue(
+                check_name="phone_format_valid",
+                severity=Severity.WARNING,
+                column=col,
+                message=f"{(1-match_rate):.0%} of phone numbers couldn't be formatted to '{output_format}'",
+                details={
+                    "expected_format": output_format,
+                    "match_rate": float(match_rate)
+                }
+            ))
+
+    return issues
+
+
+@register_check(
     "aggregation_values",
     applies_to=["group_by"]
 )
