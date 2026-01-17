@@ -1,0 +1,9 @@
+# User Test Prompts
+# Add your test prompts below - one per line
+# I will run these through the transforms_v2 library to test the agents
+#
+# Format: Just write natural language requests like a user would
+# Example: "Remove all duplicate emails and format phone numbers"
+#
+# ============================================================================
+

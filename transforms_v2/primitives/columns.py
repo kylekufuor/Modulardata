@@ -949,3 +949,786 @@ class ChangeColumnType(Primitive):
                 rows_before=rows_before,
                 cols_before=cols_before,
             )
+
+
+# =============================================================================
+# coalesce
+# =============================================================================
+
+
+@register_primitive
+class Coalesce(Primitive):
+    """Return the first non-null value from multiple columns."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="coalesce",
+            category="columns",
+            description="Get the first non-null value from a list of columns for each row",
+            params=[
+                ParamDef(
+                    name="columns",
+                    type="list[str]",
+                    required=True,
+                    description="Columns to check in order (first non-null wins)",
+                ),
+                ParamDef(
+                    name="new_column",
+                    type="str",
+                    required=True,
+                    description="Name for the result column",
+                ),
+                ParamDef(
+                    name="default",
+                    type="Any",
+                    required=False,
+                    default=None,
+                    description="Default value if all columns are null",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Get the first non-empty value from phone, mobile, or work_phone as contact_number",
+                    expected_params={
+                        "columns": ["phone", "mobile", "work_phone"],
+                        "new_column": "contact_number",
+                    },
+                    description="Coalesce phone numbers",
+                ),
+                TestPrompt(
+                    prompt="Combine email and backup_email into primary_email, using 'none@example.com' as default",
+                    expected_params={
+                        "columns": ["email", "backup_email"],
+                        "new_column": "primary_email",
+                        "default": "none@example.com",
+                    },
+                    description="Coalesce with default",
+                ),
+                TestPrompt(
+                    prompt="Get the first available address from shipping_address, billing_address, home_address",
+                    expected_params={
+                        "columns": ["shipping_address", "billing_address", "home_address"],
+                        "new_column": "address",
+                    },
+                    description="Coalesce addresses",
+                ),
+            ],
+            may_change_row_count=False,
+            may_change_col_count=True,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        columns = params["columns"]
+        new_column = params["new_column"]
+        default = params.get("default")
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        # Validate columns exist
+        missing = [c for c in columns if c not in df.columns]
+        if missing:
+            return PrimitiveResult(
+                success=False,
+                error=f"Columns not found: {missing}",
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+        try:
+            result_df = df.copy()
+
+            # Use pandas bfill on the columns to get the first non-null
+            # This works by stacking columns and taking first non-null per row
+            result_df[new_column] = result_df[columns].bfill(axis=1).iloc[:, 0]
+
+            # Apply default if specified
+            if default is not None:
+                result_df[new_column] = result_df[new_column].fillna(default)
+
+            # Count how many rows had all nulls
+            all_null_count = int(df[columns].isna().all(axis=1).sum())
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={
+                    "all_null_rows": all_null_count,
+                    "columns_checked": len(columns),
+                },
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+
+# =============================================================================
+# replace_null
+# =============================================================================
+
+
+@register_primitive
+class ReplaceNull(Primitive):
+    """Replace null values with a specified value."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="replace_null",
+            category="columns",
+            description="Replace null/missing values in one or more columns with a specified value",
+            params=[
+                ParamDef(
+                    name="columns",
+                    type="list[str]",
+                    required=False,
+                    default=None,
+                    description="Columns to replace nulls in (default: all columns)",
+                ),
+                ParamDef(
+                    name="value",
+                    type="Any",
+                    required=True,
+                    description="Value to replace nulls with",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Replace null values in the status column with 'Unknown'",
+                    expected_params={
+                        "columns": ["status"],
+                        "value": "Unknown",
+                    },
+                    description="Replace nulls in one column",
+                ),
+                TestPrompt(
+                    prompt="Replace all null values with 0",
+                    expected_params={
+                        "value": 0,
+                    },
+                    description="Replace all nulls",
+                ),
+                TestPrompt(
+                    prompt="Fill missing email and phone with 'N/A'",
+                    expected_params={
+                        "columns": ["email", "phone"],
+                        "value": "N/A",
+                    },
+                    description="Replace nulls in multiple columns",
+                ),
+            ],
+            may_change_row_count=False,
+            may_change_col_count=False,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        columns = params.get("columns")
+        value = params["value"]
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        try:
+            result_df = df.copy()
+
+            if columns:
+                # Validate columns
+                missing = [c for c in columns if c not in df.columns]
+                if missing:
+                    return PrimitiveResult(
+                        success=False,
+                        error=f"Columns not found: {missing}",
+                        rows_before=rows_before,
+                        cols_before=cols_before,
+                    )
+                # Count nulls before
+                nulls_before = result_df[columns].isna().sum().sum()
+                # Replace in specific columns
+                result_df[columns] = result_df[columns].fillna(value)
+                nulls_after = result_df[columns].isna().sum().sum()
+            else:
+                # Count nulls before
+                nulls_before = result_df.isna().sum().sum()
+                # Replace in all columns
+                result_df = result_df.fillna(value)
+                nulls_after = result_df.isna().sum().sum()
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={
+                    "nulls_replaced": int(nulls_before - nulls_after),
+                    "replacement_value": str(value),
+                },
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+
+# =============================================================================
+# concat_columns
+# =============================================================================
+
+
+@register_primitive
+class ConcatColumns(Primitive):
+    """Concatenate multiple columns into one."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="concat_columns",
+            category="columns",
+            description="Combine multiple columns into a single column with optional separator",
+            params=[
+                ParamDef(
+                    name="columns",
+                    type="list[str]",
+                    required=True,
+                    description="Columns to concatenate",
+                ),
+                ParamDef(
+                    name="new_column",
+                    type="str",
+                    required=True,
+                    description="Name for the result column",
+                ),
+                ParamDef(
+                    name="separator",
+                    type="str",
+                    required=False,
+                    default="",
+                    description="Separator between values (default: no separator)",
+                ),
+                ParamDef(
+                    name="skip_null",
+                    type="bool",
+                    required=False,
+                    default=True,
+                    description="Skip null values when concatenating (default: True)",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Combine first_name and last_name into full_name with a space",
+                    expected_params={
+                        "columns": ["first_name", "last_name"],
+                        "new_column": "full_name",
+                        "separator": " ",
+                    },
+                    description="Concat with space separator",
+                ),
+                TestPrompt(
+                    prompt="Create an address column from street, city, state, zip separated by commas",
+                    expected_params={
+                        "columns": ["street", "city", "state", "zip"],
+                        "new_column": "address",
+                        "separator": ", ",
+                    },
+                    description="Multi-column concat",
+                ),
+                TestPrompt(
+                    prompt="Combine code1 and code2 into combined_code with hyphen",
+                    expected_params={
+                        "columns": ["code1", "code2"],
+                        "new_column": "combined_code",
+                        "separator": "-",
+                    },
+                    description="Concat with hyphen",
+                ),
+            ],
+            may_change_row_count=False,
+            may_change_col_count=True,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        columns = params["columns"]
+        new_column = params["new_column"]
+        separator = params.get("separator", "")
+        skip_null = params.get("skip_null", True)
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        # Validate columns
+        missing = [c for c in columns if c not in df.columns]
+        if missing:
+            return PrimitiveResult(
+                success=False,
+                error=f"Columns not found: {missing}",
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+        try:
+            result_df = df.copy()
+
+            if skip_null:
+                # Concatenate non-null values only
+                def concat_row(row):
+                    values = [str(v) for v in row if pd.notna(v)]
+                    return separator.join(values) if values else None
+
+                result_df[new_column] = result_df[columns].apply(concat_row, axis=1)
+            else:
+                # Convert all to string (including nulls as 'nan') and concat
+                result_df[new_column] = result_df[columns].astype(str).agg(separator.join, axis=1)
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={
+                    "columns_concatenated": len(columns),
+                    "separator": separator,
+                },
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+
+# =============================================================================
+# generate_uuid
+# =============================================================================
+
+
+@register_primitive
+class GenerateUUID(Primitive):
+    """Generate unique identifiers for each row."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="generate_uuid",
+            category="columns",
+            description="Add a column with unique identifiers (UUID) for each row",
+            params=[
+                ParamDef(
+                    name="new_column",
+                    type="str",
+                    required=False,
+                    default="uuid",
+                    description="Name for the UUID column",
+                ),
+                ParamDef(
+                    name="format",
+                    type="str",
+                    required=False,
+                    default="uuid4",
+                    description="UUID format: 'uuid4' (random), 'uuid1' (time-based), 'short' (8-char hex)",
+                    choices=["uuid4", "uuid1", "short"],
+                ),
+                ParamDef(
+                    name="prefix",
+                    type="str",
+                    required=False,
+                    default="",
+                    description="Optional prefix to add before each UUID",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Add a unique ID column to the data",
+                    expected_params={"new_column": "unique_id"},
+                    description="Basic UUID generation",
+                ),
+                TestPrompt(
+                    prompt="Generate a short 8-character ID for each row in column 'row_id'",
+                    expected_params={
+                        "new_column": "row_id",
+                        "format": "short",
+                    },
+                    description="Short ID generation",
+                ),
+                TestPrompt(
+                    prompt="Create UUIDs with prefix 'TXN-' for transaction_id column",
+                    expected_params={
+                        "new_column": "transaction_id",
+                        "prefix": "TXN-",
+                    },
+                    description="UUID with prefix",
+                ),
+            ],
+            may_change_row_count=False,
+            may_change_col_count=True,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        import uuid
+
+        new_column = params.get("new_column", "uuid")
+        uuid_format = params.get("format", "uuid4")
+        prefix = params.get("prefix", "")
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        if new_column in df.columns:
+            return PrimitiveResult(
+                success=False,
+                error=f"Column '{new_column}' already exists",
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+        try:
+            result_df = df.copy()
+
+            # Generate UUIDs based on format
+            if uuid_format == "uuid4":
+                uuids = [str(uuid.uuid4()) for _ in range(len(df))]
+            elif uuid_format == "uuid1":
+                uuids = [str(uuid.uuid1()) for _ in range(len(df))]
+            elif uuid_format == "short":
+                # 8-character hex strings
+                uuids = [uuid.uuid4().hex[:8] for _ in range(len(df))]
+            else:
+                uuids = [str(uuid.uuid4()) for _ in range(len(df))]
+
+            # Add prefix if specified
+            if prefix:
+                uuids = [f"{prefix}{u}" for u in uuids]
+
+            result_df[new_column] = uuids
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={
+                    "format": uuid_format,
+                    "uuids_generated": len(uuids),
+                },
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+
+# =============================================================================
+# fill_forward
+# =============================================================================
+
+
+@register_primitive
+class FillForward(Primitive):
+    """Fill null values with the previous non-null value."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="fill_forward",
+            category="columns",
+            description="Replace null values with the most recent non-null value (forward fill)",
+            params=[
+                ParamDef(
+                    name="columns",
+                    type="list[str]",
+                    required=False,
+                    default=None,
+                    description="Columns to fill (default: all columns)",
+                ),
+                ParamDef(
+                    name="limit",
+                    type="int",
+                    required=False,
+                    default=None,
+                    description="Maximum number of consecutive nulls to fill",
+                ),
+                ParamDef(
+                    name="group_by",
+                    type="str | list[str]",
+                    required=False,
+                    default=None,
+                    description="Fill within groups (doesn't carry over between groups)",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Fill missing values in the price column with the previous price",
+                    expected_params={
+                        "columns": ["price"],
+                    },
+                    description="Fill single column forward",
+                ),
+                TestPrompt(
+                    prompt="Forward fill all null values in the dataset",
+                    expected_params={},
+                    description="Fill all columns",
+                ),
+                TestPrompt(
+                    prompt="Fill missing stock prices forward but within each ticker symbol",
+                    expected_params={
+                        "columns": ["price"],
+                        "group_by": "ticker",
+                    },
+                    description="Grouped forward fill",
+                ),
+            ],
+            may_change_row_count=False,
+            may_change_col_count=False,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        columns = params.get("columns")
+        limit = params.get("limit")
+        group_by = params.get("group_by")
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        # Validate columns
+        if columns:
+            missing = [c for c in columns if c not in df.columns]
+            if missing:
+                return PrimitiveResult(
+                    success=False,
+                    error=f"Columns not found: {missing}",
+                    rows_before=rows_before,
+                    cols_before=cols_before,
+                )
+
+        # Validate group_by
+        if group_by:
+            group_cols = [group_by] if isinstance(group_by, str) else group_by
+            missing = [c for c in group_cols if c not in df.columns]
+            if missing:
+                return PrimitiveResult(
+                    success=False,
+                    error=f"Group by columns not found: {missing}",
+                    rows_before=rows_before,
+                    cols_before=cols_before,
+                )
+        else:
+            group_cols = None
+
+        try:
+            result_df = df.copy()
+
+            # Count nulls before
+            if columns:
+                nulls_before = result_df[columns].isna().sum().sum()
+            else:
+                nulls_before = result_df.isna().sum().sum()
+
+            # Apply forward fill
+            if group_cols:
+                if columns:
+                    result_df[columns] = result_df.groupby(group_cols)[columns].ffill(limit=limit)
+                else:
+                    # Fill all columns within groups
+                    result_df = result_df.groupby(group_cols, group_keys=False).apply(
+                        lambda g: g.ffill(limit=limit)
+                    )
+            else:
+                if columns:
+                    result_df[columns] = result_df[columns].ffill(limit=limit)
+                else:
+                    result_df = result_df.ffill(limit=limit)
+
+            # Count nulls after
+            if columns:
+                nulls_after = result_df[columns].isna().sum().sum()
+            else:
+                nulls_after = result_df.isna().sum().sum()
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={
+                    "nulls_filled": int(nulls_before - nulls_after),
+                    "nulls_remaining": int(nulls_after),
+                },
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+
+# =============================================================================
+# fill_backward
+# =============================================================================
+
+
+@register_primitive
+class FillBackward(Primitive):
+    """Fill null values with the next non-null value."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="fill_backward",
+            category="columns",
+            description="Replace null values with the next non-null value (backward fill)",
+            params=[
+                ParamDef(
+                    name="columns",
+                    type="list[str]",
+                    required=False,
+                    default=None,
+                    description="Columns to fill (default: all columns)",
+                ),
+                ParamDef(
+                    name="limit",
+                    type="int",
+                    required=False,
+                    default=None,
+                    description="Maximum number of consecutive nulls to fill",
+                ),
+                ParamDef(
+                    name="group_by",
+                    type="str | list[str]",
+                    required=False,
+                    default=None,
+                    description="Fill within groups (doesn't carry over between groups)",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Fill missing values in the target column with the next available value",
+                    expected_params={
+                        "columns": ["target"],
+                    },
+                    description="Fill single column backward",
+                ),
+                TestPrompt(
+                    prompt="Backward fill all null values",
+                    expected_params={},
+                    description="Fill all columns backward",
+                ),
+                TestPrompt(
+                    prompt="Fill missing budget values backward within each department",
+                    expected_params={
+                        "columns": ["budget"],
+                        "group_by": "department",
+                    },
+                    description="Grouped backward fill",
+                ),
+            ],
+            may_change_row_count=False,
+            may_change_col_count=False,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        columns = params.get("columns")
+        limit = params.get("limit")
+        group_by = params.get("group_by")
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        # Validate columns
+        if columns:
+            missing = [c for c in columns if c not in df.columns]
+            if missing:
+                return PrimitiveResult(
+                    success=False,
+                    error=f"Columns not found: {missing}",
+                    rows_before=rows_before,
+                    cols_before=cols_before,
+                )
+
+        # Validate group_by
+        if group_by:
+            group_cols = [group_by] if isinstance(group_by, str) else group_by
+            missing = [c for c in group_cols if c not in df.columns]
+            if missing:
+                return PrimitiveResult(
+                    success=False,
+                    error=f"Group by columns not found: {missing}",
+                    rows_before=rows_before,
+                    cols_before=cols_before,
+                )
+        else:
+            group_cols = None
+
+        try:
+            result_df = df.copy()
+
+            # Count nulls before
+            if columns:
+                nulls_before = result_df[columns].isna().sum().sum()
+            else:
+                nulls_before = result_df.isna().sum().sum()
+
+            # Apply backward fill
+            if group_cols:
+                if columns:
+                    result_df[columns] = result_df.groupby(group_cols)[columns].bfill(limit=limit)
+                else:
+                    # Fill all columns within groups
+                    result_df = result_df.groupby(group_cols, group_keys=False).apply(
+                        lambda g: g.bfill(limit=limit)
+                    )
+            else:
+                if columns:
+                    result_df[columns] = result_df[columns].bfill(limit=limit)
+                else:
+                    result_df = result_df.bfill(limit=limit)
+
+            # Count nulls after
+            if columns:
+                nulls_after = result_df[columns].isna().sum().sum()
+            else:
+                nulls_after = result_df.isna().sum().sum()
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={
+                    "nulls_filled": int(nulls_before - nulls_after),
+                    "nulls_remaining": int(nulls_after),
+                },
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )

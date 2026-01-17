@@ -705,3 +705,578 @@ class RemoveCharacters(Primitive):
                 rows_before=rows_before,
                 cols_before=cols_before,
             )
+
+
+# =============================================================================
+# string_contains
+# =============================================================================
+
+
+@register_primitive
+class StringContains(Primitive):
+    """Check if text contains a substring."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="string_contains",
+            category="text",
+            description="Create a boolean column indicating if text contains a substring",
+            params=[
+                ParamDef(
+                    name="column",
+                    type="str",
+                    required=True,
+                    description="Column to search in",
+                ),
+                ParamDef(
+                    name="substring",
+                    type="str",
+                    required=True,
+                    description="Substring to search for",
+                ),
+                ParamDef(
+                    name="new_column",
+                    type="str",
+                    required=False,
+                    default=None,
+                    description="Name for result column (default: column_contains)",
+                ),
+                ParamDef(
+                    name="case_sensitive",
+                    type="bool",
+                    required=False,
+                    default=False,
+                    description="Case-sensitive search (default: False)",
+                ),
+                ParamDef(
+                    name="regex",
+                    type="bool",
+                    required=False,
+                    default=False,
+                    description="Treat substring as regex pattern",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Check if the email column contains 'gmail'",
+                    expected_params={
+                        "column": "email",
+                        "substring": "gmail",
+                    },
+                    description="Basic contains check",
+                ),
+                TestPrompt(
+                    prompt="Flag names that contain 'Jr' or 'Sr' as has_suffix",
+                    expected_params={
+                        "column": "name",
+                        "substring": "Jr|Sr",
+                        "new_column": "has_suffix",
+                        "regex": True,
+                    },
+                    description="Regex contains",
+                ),
+                TestPrompt(
+                    prompt="Check if description contains 'ERROR' (case-sensitive)",
+                    expected_params={
+                        "column": "description",
+                        "substring": "ERROR",
+                        "case_sensitive": True,
+                    },
+                    description="Case-sensitive contains",
+                ),
+            ],
+            may_change_row_count=False,
+            may_change_col_count=True,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        column = params["column"]
+        substring = params["substring"]
+        new_column = params.get("new_column") or f"{column}_contains"
+        case_sensitive = params.get("case_sensitive", False)
+        regex = params.get("regex", False)
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        if column not in df.columns:
+            return PrimitiveResult(
+                success=False,
+                error=f"Column '{column}' not found",
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+        try:
+            result_df = df.copy()
+
+            # Apply contains check
+            result_df[new_column] = result_df[column].astype(str).str.contains(
+                substring,
+                case=case_sensitive,
+                regex=regex,
+                na=False
+            )
+
+            # Count matches
+            match_count = int(result_df[new_column].sum())
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={
+                    "match_count": match_count,
+                    "no_match_count": rows_before - match_count,
+                },
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+
+# =============================================================================
+# substring
+# =============================================================================
+
+
+@register_primitive
+class Substring(Primitive):
+    """Extract a portion of text by position."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="substring",
+            category="text",
+            description="Extract characters from a string by start position and length",
+            params=[
+                ParamDef(
+                    name="column",
+                    type="str",
+                    required=True,
+                    description="Column to extract from",
+                ),
+                ParamDef(
+                    name="start",
+                    type="int",
+                    required=False,
+                    default=0,
+                    description="Starting position (0-based, default: 0)",
+                ),
+                ParamDef(
+                    name="length",
+                    type="int",
+                    required=False,
+                    default=None,
+                    description="Number of characters to extract (default: rest of string)",
+                ),
+                ParamDef(
+                    name="new_column",
+                    type="str",
+                    required=False,
+                    default=None,
+                    description="Name for result column (default: overwrites original)",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Get the first 3 characters from the code column",
+                    expected_params={
+                        "column": "code",
+                        "start": 0,
+                        "length": 3,
+                    },
+                    description="First N characters",
+                ),
+                TestPrompt(
+                    prompt="Extract characters 5-10 from the id column into short_id",
+                    expected_params={
+                        "column": "id",
+                        "start": 4,
+                        "length": 6,
+                        "new_column": "short_id",
+                    },
+                    description="Middle portion",
+                ),
+                TestPrompt(
+                    prompt="Get the last 4 characters of the phone column (skip first 6)",
+                    expected_params={
+                        "column": "phone",
+                        "start": 6,
+                    },
+                    description="From position to end",
+                ),
+            ],
+            may_change_row_count=False,
+            may_change_col_count=True,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        column = params["column"]
+        start = params.get("start", 0)
+        length = params.get("length")
+        new_column = params.get("new_column") or column
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        if column not in df.columns:
+            return PrimitiveResult(
+                success=False,
+                error=f"Column '{column}' not found",
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+        try:
+            result_df = df.copy()
+
+            # Apply substring extraction
+            col_str = result_df[column].astype(str)
+
+            if length is not None:
+                result_df[new_column] = col_str.str[start:start + length]
+            else:
+                result_df[new_column] = col_str.str[start:]
+
+            # Handle original nulls
+            result_df.loc[df[column].isna(), new_column] = None
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={"start": start, "length": length},
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+
+# =============================================================================
+# regex_replace
+# =============================================================================
+
+
+@register_primitive
+class RegexReplace(Primitive):
+    """Transform text using regex patterns with capture groups."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="regex_replace",
+            category="text",
+            description="Transform text using regex patterns with capture group backreferences",
+            params=[
+                ParamDef(
+                    name="column",
+                    type="str",
+                    required=True,
+                    description="Column to transform",
+                ),
+                ParamDef(
+                    name="pattern",
+                    type="str",
+                    required=True,
+                    description="Regex pattern with capture groups, e.g., '^(.{3})(.{4})(.*)$'",
+                ),
+                ParamDef(
+                    name="replacement",
+                    type="str",
+                    required=True,
+                    description="Replacement string with backreferences, e.g., '\\1-\\2-XX' or '$1-$2-XX'",
+                ),
+                ParamDef(
+                    name="new_column",
+                    type="str",
+                    required=False,
+                    default=None,
+                    description="Name for result column (default: overwrites original)",
+                ),
+                ParamDef(
+                    name="case_sensitive",
+                    type="bool",
+                    required=False,
+                    default=True,
+                    description="Case-sensitive matching",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Transform ABCDHED to ABC-DHED-XX format (insert dashes after 3rd and 7th chars, add XX)",
+                    expected_params={
+                        "column": "code",
+                        "pattern": "^(.{3})(.{4})(.*)$",
+                        "replacement": "\\1-\\2-XX",
+                    },
+                    description="Reformat string with inserted characters",
+                ),
+                TestPrompt(
+                    prompt="Convert phone numbers from 1234567890 to (123) 456-7890 format",
+                    expected_params={
+                        "column": "phone",
+                        "pattern": "^(\\d{3})(\\d{3})(\\d{4})$",
+                        "replacement": "(\\1) \\2-\\3",
+                    },
+                    description="Format phone numbers",
+                ),
+                TestPrompt(
+                    prompt="Swap first and last name in 'LastName, FirstName' format to 'FirstName LastName'",
+                    expected_params={
+                        "column": "name",
+                        "pattern": "^([^,]+),\\s*(.+)$",
+                        "replacement": "\\2 \\1",
+                    },
+                    description="Swap name parts",
+                ),
+            ],
+            may_change_row_count=False,
+            may_change_col_count=True,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        column = params["column"]
+        pattern = params["pattern"]
+        replacement = params["replacement"]
+        new_column = params.get("new_column") or column
+        case_sensitive = params.get("case_sensitive", True)
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        if column not in df.columns:
+            return PrimitiveResult(
+                success=False,
+                error=f"Column '{column}' not found",
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+        try:
+            result_df = df.copy()
+
+            # Normalize replacement string: convert $1, $2 to \1, \2
+            normalized_replacement = re.sub(r'\$(\d+)', r'\\\1', replacement)
+
+            # Compile regex with flags
+            flags = 0 if case_sensitive else re.IGNORECASE
+
+            # Apply regex replacement
+            result_df[new_column] = result_df[column].astype(str).str.replace(
+                pattern,
+                normalized_replacement,
+                regex=True,
+                flags=flags
+            )
+
+            # Handle original nulls
+            result_df.loc[df[column].isna(), new_column] = None
+
+            # Count successful transformations (where pattern matched)
+            original_values = df[column].astype(str)
+            new_values = result_df[new_column].astype(str)
+            changed_count = int((original_values != new_values).sum())
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={
+                    "transformed_count": changed_count,
+                    "unchanged_count": rows_before - changed_count,
+                },
+            )
+        except re.error as e:
+            return PrimitiveResult(
+                success=False,
+                error=f"Invalid regex pattern: {e}",
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+
+# =============================================================================
+# regex_extract
+# =============================================================================
+
+
+@register_primitive
+class RegexExtract(Primitive):
+    """Extract text matching a regex pattern into a new column."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="regex_extract",
+            category="text",
+            description="Extract text matching a regex pattern (with optional capture group) into a new column",
+            params=[
+                ParamDef(
+                    name="column",
+                    type="str",
+                    required=True,
+                    description="Column to extract from",
+                ),
+                ParamDef(
+                    name="pattern",
+                    type="str",
+                    required=True,
+                    description="Regex pattern (use capture group to extract specific part)",
+                ),
+                ParamDef(
+                    name="new_column",
+                    type="str",
+                    required=True,
+                    description="Name for the extracted value column",
+                ),
+                ParamDef(
+                    name="group",
+                    type="int",
+                    required=False,
+                    default=0,
+                    description="Capture group to extract (0 = entire match, 1+ = specific group)",
+                ),
+                ParamDef(
+                    name="case_sensitive",
+                    type="bool",
+                    required=False,
+                    default=True,
+                    description="Case-sensitive matching",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Extract all numbers from the text column into a numbers column",
+                    expected_params={
+                        "column": "text",
+                        "pattern": "\\d+",
+                        "new_column": "numbers",
+                    },
+                    description="Extract numbers",
+                ),
+                TestPrompt(
+                    prompt="Extract email addresses from the notes column",
+                    expected_params={
+                        "column": "notes",
+                        "pattern": "[\\w.-]+@[\\w.-]+\\.\\w+",
+                        "new_column": "extracted_email",
+                    },
+                    description="Extract emails",
+                ),
+                TestPrompt(
+                    prompt="Extract the domain from URLs in the link column",
+                    expected_params={
+                        "column": "link",
+                        "pattern": "https?://([^/]+)",
+                        "new_column": "domain",
+                        "group": 1,
+                    },
+                    description="Extract URL domain",
+                ),
+            ],
+            may_change_row_count=False,
+            may_change_col_count=True,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        column = params["column"]
+        pattern = params["pattern"]
+        new_column = params["new_column"]
+        group = params.get("group", 0)
+        case_sensitive = params.get("case_sensitive", True)
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        if column not in df.columns:
+            return PrimitiveResult(
+                success=False,
+                error=f"Column '{column}' not found",
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+        if new_column in df.columns:
+            return PrimitiveResult(
+                success=False,
+                error=f"Column '{new_column}' already exists",
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+        try:
+            result_df = df.copy()
+
+            # Compile regex with flags
+            flags = 0 if case_sensitive else re.IGNORECASE
+            compiled_pattern = re.compile(pattern, flags)
+
+            def extract_match(value):
+                if pd.isna(value):
+                    return None
+                match = compiled_pattern.search(str(value))
+                if match:
+                    if group == 0:
+                        return match.group(0)
+                    elif group <= len(match.groups()):
+                        return match.group(group)
+                return None
+
+            result_df[new_column] = result_df[column].apply(extract_match)
+
+            # Count successful extractions
+            extracted_count = int(result_df[new_column].notna().sum())
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={
+                    "extracted_count": extracted_count,
+                    "no_match_count": rows_before - extracted_count,
+                },
+            )
+        except re.error as e:
+            return PrimitiveResult(
+                success=False,
+                error=f"Invalid regex pattern: {e}",
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )

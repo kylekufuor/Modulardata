@@ -823,3 +823,655 @@ class AddRows(Primitive):
                 rows_before=rows_before,
                 cols_before=cols_before,
             )
+
+
+# =============================================================================
+# sample_rows
+# =============================================================================
+
+
+@register_primitive
+class SampleRows(Primitive):
+    """Randomly sample rows from the DataFrame."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="sample_rows",
+            category="rows",
+            description="Randomly sample a subset of rows for testing or preview",
+            params=[
+                ParamDef(
+                    name="n",
+                    type="int",
+                    required=False,
+                    default=None,
+                    description="Number of rows to sample (use n OR fraction, not both)",
+                ),
+                ParamDef(
+                    name="fraction",
+                    type="float",
+                    required=False,
+                    default=None,
+                    description="Fraction of rows to sample (0.0 to 1.0)",
+                ),
+                ParamDef(
+                    name="seed",
+                    type="int",
+                    required=False,
+                    default=None,
+                    description="Random seed for reproducibility",
+                ),
+                ParamDef(
+                    name="replace",
+                    type="bool",
+                    required=False,
+                    default=False,
+                    description="Sample with replacement (allows duplicates)",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Get a random sample of 100 rows",
+                    expected_params={"n": 100},
+                    description="Sample fixed count",
+                ),
+                TestPrompt(
+                    prompt="Sample 10% of the data randomly",
+                    expected_params={"fraction": 0.1},
+                    description="Sample by fraction",
+                ),
+                TestPrompt(
+                    prompt="Get 50 random rows with seed 42 for reproducibility",
+                    expected_params={"n": 50, "seed": 42},
+                    description="Sample with seed",
+                ),
+            ],
+            may_change_row_count=True,
+            may_change_col_count=False,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        n = params.get("n")
+        fraction = params.get("fraction")
+        seed = params.get("seed")
+        replace = params.get("replace", False)
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        # Validate parameters
+        if n is None and fraction is None:
+            n = min(10, rows_before)  # Default: 10 rows or all if less
+
+        if n is not None and fraction is not None:
+            return PrimitiveResult(
+                success=False,
+                error="Specify either 'n' or 'fraction', not both",
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+        try:
+            if fraction is not None:
+                if not 0.0 < fraction <= 1.0:
+                    return PrimitiveResult(
+                        success=False,
+                        error=f"Fraction must be between 0 and 1, got {fraction}",
+                        rows_before=rows_before,
+                        cols_before=cols_before,
+                    )
+                result_df = df.sample(frac=fraction, random_state=seed, replace=replace)
+            else:
+                # Cap n at number of rows (unless replace=True)
+                if not replace and n > rows_before:
+                    n = rows_before
+                result_df = df.sample(n=n, random_state=seed, replace=replace)
+
+            result_df = result_df.reset_index(drop=True)
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={
+                    "sampled_rows": len(result_df),
+                    "sample_rate": len(result_df) / rows_before if rows_before > 0 else 0,
+                },
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+
+# =============================================================================
+# offset_rows
+# =============================================================================
+
+
+@register_primitive
+class OffsetRows(Primitive):
+    """Skip the first N rows (offset/pagination)."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="offset_rows",
+            category="rows",
+            description="Skip the first N rows, useful for removing headers or pagination",
+            params=[
+                ParamDef(
+                    name="offset",
+                    type="int",
+                    required=True,
+                    description="Number of rows to skip from the beginning",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Skip the first 5 rows",
+                    expected_params={"offset": 5},
+                    description="Basic offset",
+                ),
+                TestPrompt(
+                    prompt="Remove the header row (first row)",
+                    expected_params={"offset": 1},
+                    description="Skip header",
+                ),
+                TestPrompt(
+                    prompt="Start from row 100 (skip first 99 rows)",
+                    expected_params={"offset": 99},
+                    description="Pagination offset",
+                ),
+            ],
+            may_change_row_count=True,
+            may_change_col_count=False,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        offset = params["offset"]
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        if offset < 0:
+            return PrimitiveResult(
+                success=False,
+                error=f"Offset must be non-negative, got {offset}",
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+        try:
+            result_df = df.iloc[offset:].reset_index(drop=True)
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={"rows_skipped": min(offset, rows_before)},
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+
+# =============================================================================
+# head_rows
+# =============================================================================
+
+
+@register_primitive
+class HeadRows(Primitive):
+    """Get the first N rows."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="head_rows",
+            category="rows",
+            description="Get the first N rows from the dataset",
+            params=[
+                ParamDef(
+                    name="n",
+                    type="int",
+                    required=False,
+                    default=10,
+                    description="Number of rows to return (default: 10)",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Show the first 20 rows",
+                    expected_params={"n": 20},
+                    description="Get first 20",
+                ),
+                TestPrompt(
+                    prompt="Preview the top 5 records",
+                    expected_params={"n": 5},
+                    description="Preview top records",
+                ),
+                TestPrompt(
+                    prompt="Get the head of the data",
+                    expected_params={"n": 10},
+                    description="Default head",
+                ),
+            ],
+            may_change_row_count=True,
+            may_change_col_count=False,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        n = params.get("n", 10)
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        if n < 0:
+            return PrimitiveResult(
+                success=False,
+                error=f"n must be non-negative, got {n}",
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+        try:
+            result_df = df.head(n).reset_index(drop=True)
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={"rows_returned": len(result_df)},
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+
+# =============================================================================
+# tail_rows
+# =============================================================================
+
+
+@register_primitive
+class TailRows(Primitive):
+    """Get the last N rows."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="tail_rows",
+            category="rows",
+            description="Get the last N rows from the dataset",
+            params=[
+                ParamDef(
+                    name="n",
+                    type="int",
+                    required=False,
+                    default=10,
+                    description="Number of rows to return (default: 10)",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Show the last 20 rows",
+                    expected_params={"n": 20},
+                    description="Get last 20",
+                ),
+                TestPrompt(
+                    prompt="Get the bottom 5 records",
+                    expected_params={"n": 5},
+                    description="Bottom records",
+                ),
+                TestPrompt(
+                    prompt="Show the tail of the data",
+                    expected_params={"n": 10},
+                    description="Default tail",
+                ),
+            ],
+            may_change_row_count=True,
+            may_change_col_count=False,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        n = params.get("n", 10)
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        if n < 0:
+            return PrimitiveResult(
+                success=False,
+                error=f"n must be non-negative, got {n}",
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+        try:
+            result_df = df.tail(n).reset_index(drop=True)
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={"rows_returned": len(result_df)},
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+
+# =============================================================================
+# shuffle_rows
+# =============================================================================
+
+
+@register_primitive
+class ShuffleRows(Primitive):
+    """Randomly shuffle the order of rows."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="shuffle_rows",
+            category="rows",
+            description="Randomly shuffle (reorder) all rows in the dataset",
+            params=[
+                ParamDef(
+                    name="seed",
+                    type="int",
+                    required=False,
+                    default=None,
+                    description="Random seed for reproducibility",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Randomize the order of rows",
+                    expected_params={},
+                    description="Basic shuffle",
+                ),
+                TestPrompt(
+                    prompt="Shuffle the data with seed 42",
+                    expected_params={"seed": 42},
+                    description="Shuffle with seed",
+                ),
+                TestPrompt(
+                    prompt="Mix up the row order randomly",
+                    expected_params={},
+                    description="Mix rows",
+                ),
+            ],
+            may_change_row_count=False,
+            may_change_col_count=False,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        seed = params.get("seed")
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        try:
+            result_df = df.sample(frac=1, random_state=seed).reset_index(drop=True)
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={"shuffled": True},
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+
+# =============================================================================
+# row_number
+# =============================================================================
+
+
+@register_primitive
+class RowNumber(Primitive):
+    """Add a sequential row number column."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="row_number",
+            category="rows",
+            description="Add a column with sequential row numbers",
+            params=[
+                ParamDef(
+                    name="new_column",
+                    type="str",
+                    required=False,
+                    default="row_num",
+                    description="Name for the row number column",
+                ),
+                ParamDef(
+                    name="start",
+                    type="int",
+                    required=False,
+                    default=1,
+                    description="Starting number (default: 1)",
+                ),
+                ParamDef(
+                    name="partition_by",
+                    type="list[str]",
+                    required=False,
+                    default=None,
+                    description="Reset numbering for each group (like SQL PARTITION BY)",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Add row numbers to the data",
+                    expected_params={"new_column": "row_num"},
+                    description="Basic row numbers",
+                ),
+                TestPrompt(
+                    prompt="Number the rows starting from 0 in a column called idx",
+                    expected_params={"new_column": "idx", "start": 0},
+                    description="Zero-based index",
+                ),
+                TestPrompt(
+                    prompt="Add row numbers that reset for each department",
+                    expected_params={"partition_by": ["department"]},
+                    description="Partitioned row numbers",
+                ),
+            ],
+            may_change_row_count=False,
+            may_change_col_count=True,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        new_column = params.get("new_column", "row_num")
+        start = params.get("start", 1)
+        partition_by = params.get("partition_by")
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        try:
+            result_df = df.copy()
+
+            if partition_by:
+                # Validate partition columns
+                missing = [c for c in partition_by if c not in df.columns]
+                if missing:
+                    return PrimitiveResult(
+                        success=False,
+                        error=f"Partition columns not found: {missing}",
+                        rows_before=rows_before,
+                        cols_before=cols_before,
+                    )
+                # Row number within each partition
+                result_df[new_column] = result_df.groupby(partition_by).cumcount() + start
+            else:
+                # Simple sequential row numbers
+                result_df[new_column] = range(start, start + len(result_df))
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={"start": start, "partitioned": partition_by is not None},
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+
+# =============================================================================
+# explode_column
+# =============================================================================
+
+
+@register_primitive
+class ExplodeColumn(Primitive):
+    """Split delimited values into multiple rows."""
+
+    @classmethod
+    def info(cls) -> PrimitiveInfo:
+        return PrimitiveInfo(
+            name="explode_column",
+            category="rows",
+            description="Split a column with delimited values into multiple rows",
+            params=[
+                ParamDef(
+                    name="column",
+                    type="str",
+                    required=True,
+                    description="Column containing delimited values to explode",
+                ),
+                ParamDef(
+                    name="delimiter",
+                    type="str",
+                    required=False,
+                    default=",",
+                    description="Delimiter to split on (default: comma)",
+                ),
+                ParamDef(
+                    name="trim",
+                    type="bool",
+                    required=False,
+                    default=True,
+                    description="Trim whitespace from resulting values",
+                ),
+            ],
+            test_prompts=[
+                TestPrompt(
+                    prompt="Split the tags column into separate rows",
+                    expected_params={"column": "tags"},
+                    description="Basic explode",
+                ),
+                TestPrompt(
+                    prompt="Explode the categories column using semicolon as separator",
+                    expected_params={"column": "categories", "delimiter": ";"},
+                    description="Custom delimiter",
+                ),
+                TestPrompt(
+                    prompt="Split the items column by pipe character",
+                    expected_params={"column": "items", "delimiter": "|"},
+                    description="Pipe delimiter",
+                ),
+            ],
+            may_change_row_count=True,
+            may_change_col_count=False,
+        )
+
+    def execute(self, df: pd.DataFrame, params: dict[str, Any]) -> PrimitiveResult:
+        column = params["column"]
+        delimiter = params.get("delimiter", ",")
+        trim = params.get("trim", True)
+
+        rows_before = len(df)
+        cols_before = len(df.columns)
+
+        if column not in df.columns:
+            return PrimitiveResult(
+                success=False,
+                error=f"Column '{column}' not found",
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )
+
+        try:
+            result_df = df.copy()
+
+            # Split the column values
+            result_df[column] = result_df[column].astype(str).str.split(delimiter)
+
+            # Explode into multiple rows
+            result_df = result_df.explode(column).reset_index(drop=True)
+
+            # Trim whitespace if requested
+            if trim:
+                result_df[column] = result_df[column].str.strip()
+
+            # Handle 'nan' strings from null values
+            result_df.loc[result_df[column] == "nan", column] = None
+
+            return PrimitiveResult(
+                success=True,
+                df=result_df,
+                rows_before=rows_before,
+                rows_after=len(result_df),
+                cols_before=cols_before,
+                cols_after=len(result_df.columns),
+                metadata={
+                    "rows_created": len(result_df) - rows_before,
+                    "delimiter": delimiter,
+                },
+            )
+        except Exception as e:
+            return PrimitiveResult(
+                success=False,
+                error=str(e),
+                rows_before=rows_before,
+                cols_before=cols_before,
+            )

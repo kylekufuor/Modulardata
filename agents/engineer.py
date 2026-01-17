@@ -4,13 +4,14 @@
 # The Engineer Agent executes TechnicalPlans from the Strategist.
 #
 # Key responsibilities:
-# - Execute transformation functions (hardcoded, not LLM-generated)
+# - Execute transformation functions using transforms_v2 primitives
 # - Validate plans and data before execution
 # - Generate new node with transformed data
 # - Track code for transparency ("show your work")
 #
 # Architecture:
-# - Uses registry pattern for transformation functions
+# - PRIMARY: Uses transforms_v2 Engine for deterministic primitives (38 ops)
+# - FALLBACK: Uses old registry for operations not yet in transforms_v2
 # - Each transformation returns (DataFrame, code_string)
 # - Supports batch execution for multiple plans -> single node
 #
@@ -35,8 +36,17 @@ import pandas as pd
 from agents.models.technical_plan import TechnicalPlan, TransformationType
 from agents.models.execution_result import ExecutionResult, BatchExecutionResult
 from agents.transformations import get_transformer, REGISTRY
+from agents.plan_translator import PlanTranslator, TranslationError
 from lib.profiler import generate_profile
 from lib.supabase_client import SupabaseClient, SupabaseClientError
+
+# Import transforms_v2 Engine
+try:
+    from transforms_v2 import Engine as V2Engine
+    TRANSFORMS_V2_AVAILABLE = True
+except ImportError:
+    TRANSFORMS_V2_AVAILABLE = False
+    V2Engine = None
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -73,8 +83,8 @@ class EngineerAgent:
     """
     Agent that executes TechnicalPlans to transform data.
 
-    The Engineer is deterministic - it uses hardcoded transformation
-    functions rather than LLM-generated code. This ensures:
+    The Engineer is deterministic - it uses transforms_v2 primitives
+    (primary) or hardcoded transformation functions (fallback). This ensures:
     - Predictable, testable results
     - No code injection risks
     - Fast execution (no API calls)
@@ -96,11 +106,131 @@ class EngineerAgent:
     def __init__(self):
         """Initialize the Engineer agent."""
         self._validate_registry()
+        self._translator = PlanTranslator()
+        self._v2_engine = V2Engine() if TRANSFORMS_V2_AVAILABLE else None
+
+        if TRANSFORMS_V2_AVAILABLE:
+            logger.info("Engineer initialized with transforms_v2 Engine (primary)")
+        else:
+            logger.warning("transforms_v2 not available, using legacy registry only")
 
     def _validate_registry(self) -> None:
         """Ensure transformation registry is populated."""
         if not REGISTRY:
             logger.warning("Transformation registry is empty - no transformations available")
+
+    # -------------------------------------------------------------------------
+    # Transformation Execution (v2 primary, legacy fallback)
+    # -------------------------------------------------------------------------
+
+    def _execute_transformation(
+        self,
+        df: pd.DataFrame,
+        plan: TechnicalPlan,
+    ) -> tuple[pd.DataFrame, str]:
+        """
+        Execute a transformation using transforms_v2 (primary) or legacy (fallback).
+
+        Args:
+            df: Input DataFrame
+            plan: TechnicalPlan to execute
+
+        Returns:
+            Tuple of (transformed DataFrame, generated code string)
+
+        Raises:
+            EngineerError: If both v2 and legacy execution fail
+        """
+        # Try transforms_v2 first if available
+        if self._v2_engine and self._translator.can_translate(plan):
+            try:
+                return self._execute_with_v2(df, plan)
+            except TranslationError as e:
+                logger.warning(f"transforms_v2 translation failed: {e}, falling back to legacy")
+            except Exception as e:
+                logger.warning(f"transforms_v2 execution failed: {e}, falling back to legacy")
+
+        # Fallback to legacy registry
+        return self._execute_with_legacy(df, plan)
+
+    def _execute_with_v2(
+        self,
+        df: pd.DataFrame,
+        plan: TechnicalPlan,
+    ) -> tuple[pd.DataFrame, str]:
+        """
+        Execute using transforms_v2 Engine.
+
+        Args:
+            df: Input DataFrame
+            plan: TechnicalPlan to execute
+
+        Returns:
+            Tuple of (transformed DataFrame, generated code string)
+
+        Raises:
+            EngineerError: If execution fails
+        """
+        # Translate TechnicalPlan to v2 format
+        v2_plan = self._translator.translate(plan)
+
+        logger.info(f"Executing via transforms_v2: {v2_plan}")
+
+        # Execute using v2 Engine
+        result = self._v2_engine.execute(df, v2_plan)
+
+        if not result.success:
+            raise EngineerError(
+                message=f"transforms_v2 execution failed: {result.error}",
+                code="V2_EXECUTION_FAILED",
+            )
+
+        # Generate code string for transparency
+        code = self._generate_v2_code(v2_plan)
+
+        return result.df, code
+
+    def _execute_with_legacy(
+        self,
+        df: pd.DataFrame,
+        plan: TechnicalPlan,
+    ) -> tuple[pd.DataFrame, str]:
+        """
+        Execute using legacy transformation registry.
+
+        Args:
+            df: Input DataFrame
+            plan: TechnicalPlan to execute
+
+        Returns:
+            Tuple of (transformed DataFrame, generated code string)
+
+        Raises:
+            EngineerError: If execution fails
+        """
+        transformer = get_transformer(plan.transformation_type)
+        if not transformer:
+            raise EngineerError(
+                message=f"Unknown transformation type: {plan.transformation_type}",
+                code="UNKNOWN_TRANSFORMATION",
+                suggestion=f"Available types: {list(REGISTRY.keys())[:10]}...",
+            )
+
+        logger.info(f"Executing via legacy registry: {plan.transformation_type}")
+
+        return transformer(df, plan)
+
+    def _generate_v2_code(self, v2_plan: list[dict]) -> str:
+        """Generate a code string from a v2 plan for transparency."""
+        lines = ["# Generated by transforms_v2 Engine"]
+        for step in v2_plan:
+            op = step.get("op", "unknown")
+            params = step.get("params", {})
+            # Format params nicely
+            param_strs = [f"{k}={repr(v)}" for k, v in params.items()
+                         if not isinstance(v, pd.DataFrame)]  # Skip DataFrame params
+            lines.append(f"df = engine.execute_single(df, '{op}', {{{', '.join(param_strs)}}})")
+        return "\n".join(lines)
 
     # -------------------------------------------------------------------------
     # Main Execution Methods
@@ -147,17 +277,8 @@ class EngineerAgent:
             # 3. Validate columns exist
             self._validate_columns(df, plan)
 
-            # 4. Get transformer and execute
-            transformer = get_transformer(plan.transformation_type)
-            if not transformer:
-                raise EngineerError(
-                    message=f"Unknown transformation type: {plan.transformation_type}",
-                    code="UNKNOWN_TRANSFORMATION",
-                    suggestion=f"Available types: {list(REGISTRY.keys())[:10]}...",
-                )
-
-            # Execute transformation
-            transformed_df, code = transformer(df, plan)
+            # 4. Execute transformation (try transforms_v2 first, then legacy)
+            transformed_df, code = self._execute_transformation(df, plan)
 
             # 5. Validate result
             self._validate_result(df, transformed_df, plan)
@@ -281,9 +402,8 @@ class EngineerAgent:
                         successful_transformations=i,
                     )
 
-                # Get transformer and execute to update current_df
-                transformer = get_transformer(plan.transformation_type)
-                current_df, code = transformer(current_df, plan)
+                # Execute transformation to update current_df
+                current_df, code = self._execute_transformation(current_df, plan)
                 all_code.append(code)
                 all_explanations.append(plan.explanation)
 
@@ -347,16 +467,8 @@ class EngineerAgent:
         self._validate_plan(plan)
         self._validate_columns(df, plan)
 
-        # Get transformer
-        transformer = get_transformer(plan.transformation_type)
-        if not transformer:
-            raise EngineerError(
-                message=f"Unknown transformation: {plan.transformation_type}",
-                code="UNKNOWN_TRANSFORMATION",
-            )
-
-        # Execute
-        return transformer(df, plan)
+        # Execute using transforms_v2 (primary) or legacy (fallback)
+        return self._execute_transformation(df, plan)
 
     # -------------------------------------------------------------------------
     # Undo Operation

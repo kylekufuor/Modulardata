@@ -126,6 +126,9 @@ export const api = {
   getNodeProfile: (sessionId: string, nodeId: string) =>
     fetchWithAuth(`/api/v1/sessions/${sessionId}/nodes/${nodeId}/profile`),
 
+  getNodeCodeChain: (sessionId: string, nodeId: string) =>
+    fetchWithAuth(`/api/v1/sessions/${sessionId}/nodes/${nodeId}/code-chain`),
+
   // Download
   downloadNodeData: async (sessionId: string, nodeId: string, filename?: string) => {
     const { data: { session } } = await supabase.auth.getSession()

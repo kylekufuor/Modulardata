@@ -317,3 +317,81 @@ async def get_node_profile(
         "transformation_code": node.get("transformation_code"),
         "profile": node.get("profile_json", {}),
     }
+
+
+@router.get("/{session_id}/nodes/{node_id}/code-chain")
+async def get_node_code_chain(
+    session_id: Annotated[UUID, Path(description="Session UUID")],
+    node_id: Annotated[UUID, Path(description="Node UUID")],
+    user: AuthUser = Depends(get_current_user),
+):
+    """
+    Get the complete code chain from the root node to this node.
+
+    Returns an ordered list of all transformations in the lineage,
+    making it easy to copy and run the entire pipeline locally.
+    User must own the session.
+    """
+    session_id_str = str(session_id)
+    node_id_str = str(node_id)
+
+    # Verify session exists and user owns it
+    SessionService.get_session(session_id_str, user_id=user.id)
+
+    # Get node to verify it belongs to session
+    node = NodeService.get_node(node_id_str)
+    if str(node.get("session_id")) != session_id_str:
+        raise NodeNotFoundError(node_id_str)
+
+    # Get the full lineage from root to this node
+    lineage = NodeService.get_node_lineage(node_id_str, depth=100)
+
+    # Build the code chain
+    steps = []
+    for i, ancestor in enumerate(lineage):
+        step = {
+            "node_id": ancestor["id"],
+            "step_number": i,
+            "transformation": ancestor.get("transformation"),
+            "transformation_code": ancestor.get("transformation_code"),
+            "row_count": ancestor.get("row_count", 0),
+            "column_count": ancestor.get("column_count", 0),
+            "is_current": ancestor["id"] == node_id_str,
+        }
+        steps.append(step)
+
+    # Build the combined code string for easy copying
+    code_lines = [
+        "# =============================================================================",
+        "# Complete Transformation Pipeline",
+        "# =============================================================================",
+        "# Generated from ModularData transformation chain",
+        "# Copy this code to run the same transformations locally",
+        "# =============================================================================",
+        "",
+        "import pandas as pd",
+        "from transforms_v2 import Engine",
+        "",
+        "# Load your data",
+        "df = pd.read_csv('your_data.csv')",
+        "engine = Engine()",
+        "",
+    ]
+
+    for step in steps:
+        if step["transformation_code"]:
+            code_lines.append(f"# {'=' * 60}")
+            code_lines.append(f"# Step {step['step_number']}: {step['transformation'] or 'Transformation'}")
+            code_lines.append(f"# {'=' * 60}")
+            code_lines.append(step["transformation_code"])
+            code_lines.append("")
+
+    combined_code = "\n".join(code_lines)
+
+    return {
+        "session_id": session_id_str,
+        "node_id": node_id_str,
+        "total_steps": len(steps),
+        "steps": steps,
+        "combined_code": combined_code,
+    }

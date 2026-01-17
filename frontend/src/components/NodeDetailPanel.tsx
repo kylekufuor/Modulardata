@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { X, Loader2, Table, Code, BarChart3, Upload, GitBranch, FileSpreadsheet, ArrowRight, ChevronRight, Pencil, Check, Download, ClipboardList } from 'lucide-react'
+import { X, Loader2, Table, Code, BarChart3, Upload, GitBranch, FileSpreadsheet, ArrowRight, ChevronRight, Pencil, Check, Download, ClipboardList, Copy, CheckCircle } from 'lucide-react'
 import { api } from '../lib/api'
 import type { Node, ColumnProfile } from '../types'
 
@@ -44,6 +44,24 @@ interface NodeProfile {
   issues?: DataIssue[]
 }
 
+interface CodeChainStep {
+  node_id: string
+  step_number: number
+  transformation: string | null
+  transformation_code: string | null
+  row_count: number
+  column_count: number
+  is_current: boolean
+}
+
+interface CodeChainData {
+  session_id: string
+  node_id: string
+  total_steps: number
+  steps: CodeChainStep[]
+  combined_code: string
+}
+
 export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, onDataRefresh, onBranchFromNode, onNodeRenamed, onSelectNode }: NodeDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('preview')
   const [nodeData, setNodeData] = useState<NodeData | null>(null)
@@ -65,6 +83,11 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
 
   // Download state
   const [downloading, setDownloading] = useState(false)
+
+  // Code chain state
+  const [codeChain, setCodeChain] = useState<CodeChainData | null>(null)
+  const [codeChainLoading, setCodeChainLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const isOriginal = !node.parent_id
 
@@ -151,6 +174,29 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
       })
     } catch (err) {
       console.error('Failed to load parent profile:', err)
+    }
+  }
+
+  const loadCodeChain = async () => {
+    setCodeChainLoading(true)
+    try {
+      const data = await api.getNodeCodeChain(sessionId, node.id)
+      setCodeChain(data)
+    } catch (err) {
+      console.error('Failed to load code chain:', err)
+    } finally {
+      setCodeChainLoading(false)
+    }
+  }
+
+  const copyCodeToClipboard = async () => {
+    if (!codeChain?.combined_code) return
+    try {
+      await navigator.clipboard.writeText(codeChain.combined_code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
     }
   }
 
@@ -257,6 +303,13 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
       setDownloading(false)
     }
   }
+
+  // Load code chain when switching to code tab
+  useEffect(() => {
+    if (activeTab === 'code' && !codeChain && !codeChainLoading) {
+      loadCodeChain()
+    }
+  }, [activeTab])
 
   // Close on escape key
   useEffect(() => {
@@ -835,11 +888,126 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
 
           {activeTab === 'code' && (
             <div className="h-full overflow-auto p-6">
-              <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
-                <pre className="text-sm text-gray-100 font-mono whitespace-pre-wrap">
-                  {nodeDetail?.transformation_code || 'No code available'}
-                </pre>
-              </div>
+              {codeChainLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                </div>
+              ) : codeChain && codeChain.steps.length > 0 ? (
+                <div className="space-y-4">
+                  {/* Header with Copy Button */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900">
+                        Complete Transformation Pipeline
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {codeChain.total_steps} step{codeChain.total_steps !== 1 ? 's' : ''} • Copy to run locally
+                      </p>
+                    </div>
+                    <button
+                      onClick={copyCodeToClipboard}
+                      className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                        copied
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {copied ? (
+                        <>
+                          <CheckCircle className="w-4 h-4" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          Copy Full Chain
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Code Chain Steps */}
+                  <div className="bg-gray-900 rounded-lg overflow-hidden">
+                    {/* Boilerplate Header */}
+                    <div className="px-4 py-3 bg-gray-800 border-b border-gray-700">
+                      <pre className="text-sm text-gray-400 font-mono">
+{`# Complete Transformation Pipeline
+# Generated from ModularData transformation chain
+
+import pandas as pd
+from transforms_v2 import Engine
+
+# Load your data
+df = pd.read_csv('your_data.csv')
+engine = Engine()`}
+                      </pre>
+                    </div>
+
+                    {/* Transformation Steps */}
+                    {codeChain.steps.filter(step => step.transformation_code).map((step) => (
+                      <div
+                        key={step.node_id}
+                        className={`border-b border-gray-700 last:border-b-0 ${
+                          step.is_current ? 'bg-blue-900/30' : ''
+                        }`}
+                      >
+                        {/* Step Header */}
+                        <div className={`px-4 py-2 flex items-center justify-between ${
+                          step.is_current
+                            ? 'bg-blue-800/40 border-l-4 border-blue-500'
+                            : 'bg-gray-800/50'
+                        }`}>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                              step.is_current
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-gray-600 text-gray-300'
+                            }`}>
+                              Step {step.step_number}
+                            </span>
+                            <span className={`text-sm ${
+                              step.is_current ? 'text-blue-200' : 'text-gray-400'
+                            }`}>
+                              {step.transformation || 'Transformation'}
+                            </span>
+                            {step.is_current && (
+                              <span className="text-xs text-blue-400 font-medium">
+                                ← Current
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {step.row_count.toLocaleString()} rows
+                          </span>
+                        </div>
+
+                        {/* Step Code */}
+                        <div className="px-4 py-3">
+                          <pre className={`text-sm font-mono whitespace-pre-wrap ${
+                            step.is_current ? 'text-blue-100' : 'text-gray-300'
+                          }`}>
+                            {step.transformation_code}
+                          </pre>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Footer */}
+                    <div className="px-4 py-3 bg-gray-800 border-t border-gray-700">
+                      <pre className="text-sm text-gray-400 font-mono">
+{`# Final result is in 'df'
+# df.to_csv('output.csv', index=False)`}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
+                  <pre className="text-sm text-gray-100 font-mono whitespace-pre-wrap">
+                    {nodeDetail?.transformation_code || 'No code available'}
+                  </pre>
+                </div>
+              )}
             </div>
           )}
           </div>
