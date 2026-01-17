@@ -393,6 +393,11 @@ export default function NodeDetailPanel({ sessionId, node, parentNode, onClose, 
             <p className="text-xs text-gray-500 mt-1">
               {formatTimeAgo(node.created_at)}
             </p>
+            {!isOriginal && (
+              <p className="text-xs text-gray-400 mt-2">
+                Go to <button onClick={() => setActiveTab('summary')} className="text-blue-500 hover:underline font-medium">Summary</button> to see what changed
+              </p>
+            )}
 
             {/* Step Descriptions */}
             {node.step_descriptions && node.step_descriptions.length > 0 && (
