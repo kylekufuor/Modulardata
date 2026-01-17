@@ -12,8 +12,35 @@
 import logging
 from typing import Any
 from celery import shared_task, current_task
+import pandas as pd
+import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_serialize_rows(df: pd.DataFrame, max_rows: int = 10) -> list[dict]:
+    """
+    Safely convert DataFrame rows to JSON-serializable dicts.
+
+    Handles NaT, NaN, numpy types, and other non-serializable values.
+    """
+    rows = []
+    for _, row in df.head(max_rows).iterrows():
+        safe_row = {}
+        for col, val in row.items():
+            # Handle various non-serializable types
+            if pd.isna(val):
+                safe_row[col] = None
+            elif isinstance(val, (pd.Timestamp, np.datetime64)):
+                safe_row[col] = str(val) if not pd.isna(val) else None
+            elif isinstance(val, (np.integer, np.floating)):
+                safe_row[col] = val.item()  # Convert numpy scalar to Python type
+            elif isinstance(val, np.ndarray):
+                safe_row[col] = val.tolist()
+            else:
+                safe_row[col] = val
+        rows.append(safe_row)
+    return rows
 
 
 # =============================================================================
@@ -260,7 +287,7 @@ def process_chat_message(
             profile_json=profile.model_dump(),
             transformation=plan.explanation,
             transformation_code=code,
-            preview_rows=result_df.head(10).to_dict(orient="records"),
+            preview_rows=_safe_serialize_rows(result_df, 10),
             step_descriptions=[plan.explanation],
         )
 
@@ -605,7 +632,7 @@ def process_plan_apply(
             profile_json=profile.model_dump(),
             transformation=short_label,
             transformation_code=combined_code,
-            preview_rows=df.head(10).to_dict(orient="records"),
+            preview_rows=_safe_serialize_rows(df, 10),
             node_id=new_node_id,
             step_descriptions=all_explanations,
         )
