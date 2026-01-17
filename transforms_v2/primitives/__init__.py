@@ -9,8 +9,8 @@
 #   - format: Operations that format values (dates, phones, text case, etc.)
 #   - text: Text manipulation operations (find/replace, extract, pad, etc.)
 #   - calculate: Mathematical operations (math, round, percentage, rank, etc.)
-#   - tables: Multi-table operations (coming in Phase 3)
-#   - groups: Aggregation operations (coming in Phase 3)
+#   - tables: Multi-table operations (join, union, lookup)
+#   - groups: Aggregation operations (aggregate, pivot, unpivot)
 #
 # Import all primitives here to register them with the global registry.
 # =============================================================================
@@ -24,6 +24,6 @@ from transforms_v2.primitives import format
 from transforms_v2.primitives import text
 from transforms_v2.primitives import calculate
 
-# Future phases will add:
-# from transforms_v2.primitives import tables
-# from transforms_v2.primitives import groups
+# Phase 3: Multi-table and aggregation primitives
+from transforms_v2.primitives import tables
+from transforms_v2.primitives import groups
