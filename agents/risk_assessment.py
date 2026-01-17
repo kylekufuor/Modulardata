@@ -123,6 +123,33 @@ def assess_transformation_risk(
     )
 
 
+def _safe_serialize_rows(df: pd.DataFrame, max_rows: int = 3) -> list[dict]:
+    """
+    Safely convert DataFrame rows to JSON-serializable dicts.
+
+    Handles NaT, NaN, numpy types, and other non-serializable values.
+    """
+    import numpy as np
+
+    rows = []
+    for _, row in df.head(max_rows).iterrows():
+        safe_row = {}
+        for col, val in row.items():
+            # Handle various non-serializable types
+            if pd.isna(val):
+                safe_row[col] = None
+            elif isinstance(val, (pd.Timestamp, np.datetime64)):
+                safe_row[col] = str(val) if not pd.isna(val) else None
+            elif isinstance(val, (np.integer, np.floating)):
+                safe_row[col] = val.item()  # Convert numpy scalar to Python type
+            elif isinstance(val, np.ndarray):
+                safe_row[col] = val.tolist()
+            else:
+                safe_row[col] = val
+        rows.append(safe_row)
+    return rows
+
+
 def _estimate_row_impact(
     df: pd.DataFrame,
     plan: TechnicalPlan,
@@ -143,7 +170,7 @@ def _estimate_row_impact(
                 # Get sample of rows that will be removed
                 removed_df = df[~mask]
                 if len(removed_df) > 0:
-                    result["sample_removed"] = removed_df.head(3).to_dict(orient="records")
+                    result["sample_removed"] = _safe_serialize_rows(removed_df)
 
         elif trans_type == "drop_rows":
             if plan.conditions:
@@ -151,7 +178,7 @@ def _estimate_row_impact(
                 result["rows_after"] = len(df) - mask.sum()
                 removed_df = df[mask]
                 if len(removed_df) > 0:
-                    result["sample_removed"] = removed_df.head(3).to_dict(orient="records")
+                    result["sample_removed"] = _safe_serialize_rows(removed_df)
             else:
                 # Drop rows with nulls in target columns
                 target_cols = plan.get_target_column_names()
